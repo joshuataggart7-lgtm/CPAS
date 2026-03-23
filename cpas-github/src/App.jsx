@@ -2095,7 +2095,7 @@ async function callAI(prompt, systemPrompt) {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-5",
+        model:"claude-sonnet-4-5-20251001",
         max_tokens:2000,
         system: systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional, complete procurement documents compliant with FAR and NFS.",
         messages:[{role:"user",content:prompt}]
