@@ -2095,15 +2095,19 @@ async function callAI(prompt, systemPrompt) {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-5-20251001",
+        model:"claude-haiku-4-5-20251001",
         max_tokens:2000,
         system: systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional, complete procurement documents compliant with FAR and NFS.",
         messages:[{role:"user",content:prompt}]
       })
     });
-    const data = await res.json();
-    if (data.error) return "API Error: "+data.error.message;
-    return data.content?.[0]?.text || "Generation failed.";
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { return "Parse error: "+text.substring(0,200); }
+    if (!res.ok) return "HTTP "+res.status+": "+JSON.stringify(data).substring(0,300);
+    if (data.error) return "API Error: "+JSON.stringify(data.error).substring(0,300);
+    if (data.content && data.content[0]) return data.content[0].text;
+    return "Unexpected response: "+JSON.stringify(data).substring(0,300);
   } catch(e) { return "Error: "+(e.message); }
 }
 
@@ -2248,4 +2252,6 @@ const RCPO_CHAINS = {
   ],
 
 };
+
+
 
