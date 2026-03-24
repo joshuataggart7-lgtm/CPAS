@@ -834,6 +834,13 @@ function StepWorkspace({ step, intake, roadmap, onClose, onComplete, isDone }) {
                       <button style={S.copyBtn} onClick={()=>copyDoc(curPkg.key)}>
                         {copied===curPkg.key ? "v COPIED" : " COPY"}
                       </button>
+                      <button style={{ ...S.copyBtn, background:"#0a1a3a", border:"1px solid #2a6aaa", color:"#4a9eff" }}
+                        onClick={async()=>{
+                          const err = await downloadAsWord(curPkg.docType||step.docType||"DOC", docContent[curPkg.key], intake);
+                          if(err) alert(err);
+                        }}>
+                        WORD
+                      </button>
                       <button style={S.copyBtn} onClick={()=>genDoc(curPkg.docType, curPkg.key)}>
                         {loading[curPkg.key] ? "..." : "<-> REGENERATE"}
                       </button>
@@ -886,6 +893,13 @@ function StepWorkspace({ step, intake, roadmap, onClose, onComplete, isDone }) {
                     <div style={{ display:"flex", gap:"8px", marginTop:"8px", flexWrap:"wrap" }}>
                       <button style={S.copyBtn} onClick={()=>copyDoc(curPkg.key)}>
                         {copied===curPkg.key ? "v COPIED" : " COPY"}
+                      </button>
+                      <button style={{ ...S.copyBtn, background:"#0a1a3a", border:"1px solid #2a6aaa", color:"#4a9eff" }}
+                        onClick={async()=>{
+                          const err = await downloadAsWord(curPkg.docType||step.docType||"DOC", docContent[curPkg.key], intake);
+                          if(err) alert(err);
+                        }}>
+                        WORD
                       </button>
                       <button style={S.copyBtn} onClick={()=>genDoc(curPkg.docType, curPkg.key)}>
                         {loading[curPkg.key] ? "..." : "<-> REGENERATE"}
@@ -2111,6 +2125,44 @@ async function callAI(prompt, systemPrompt) {
   } catch(e) { return "Error: "+(e.message); }
 }
 
+
+async function downloadAsWord(docType, text, intake) {
+  try {
+    const docTypeLabels = {
+      JOFOC: "Justification for Other Than Full and Open Competition",
+      PNM: "Price Negotiation Memorandum",
+      ACQ_PLAN: "Procurement Strategy Meeting",
+      QASP: "Quality Assurance Surveillance Plan",
+      COR_LETTER: "COR Appointment Letter",
+      MARKET_RESEARCH: "Market Research Report",
+      IGCE: "Independent Government Cost Estimate",
+      SOURCES_SOUGHT: "Sources Sought Notice",
+      CLOSEOUT: "Contract Closeout Checklist"
+    };
+    const label = docTypeLabels[docType] || docType;
+    const safeTitle = (intake?.reqTitle || "document").replace(/[^a-zA-Z0-9]/g, "_").substring(0, 40);
+    const filename = label.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 30) + "_" + safeTitle + ".docx";
+
+    const res = await fetch("/.netlify/functions/generate-docx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, docType: label, intake, filename })
+    });
+    const data = await res.json();
+    if (data.error) return "Word export error: " + data.error;
+
+    const bytes = Uint8Array.from(atob(data.docx), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = data.filename || filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    return null; // success
+  } catch(e) { return "Error: " + e.message; }
+}
+
 async function generateDoc(docType, intake, roadmap) {
   const lane = getLaneLabel(roadmap.lane);
   const ctx = "\nACQUISITION PARAMETERS:\n- Title: "+(intake.reqTitle || "NASA Requirement")+"\n- Center: "+(intake.center || "NASA")+"\n- Value: $"+((intake.value||0).toLocaleString())+"\n- Type: "+(intake.reqType)+"\n- Commercial: "+(intake.isCommercial)+"\n- Lane: "+(lane)+"\n- Competition: "+(intake.competitionStrategy)+"\n- Contract Type: "+(intake.contractType)+"\n- NAICS: "+(intake.naics || "541330")+"\n- PSC: "+(intake.psc || "R499")+"\n- Period of Performance: "+(intake.pop || "Base year + 4 option years")+"\n- Recompete: "+(intake.isRecompete);
@@ -2252,6 +2304,4 @@ const RCPO_CHAINS = {
   ],
 
 };
-
-
 
