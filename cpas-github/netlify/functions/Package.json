@@ -1,7 +1,0 @@
-{
-  "name": "cpas-functions",
-  "version": "1.0.0",
-  "dependencies": {
-    "docx": "^8.5.0"
-  }
-}
