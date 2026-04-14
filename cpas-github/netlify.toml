@@ -1,0 +1,25 @@
+[build]
+  base = "cpas-github"
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "nft"
+
+[functions."claude"]
+  timeout = 30
+
+[functions."generate-docx"]
+  timeout = 30
+
+[functions."workflow"]
+  timeout = 30
+
+[functions."package-workflow"]
+  timeout = 30
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
