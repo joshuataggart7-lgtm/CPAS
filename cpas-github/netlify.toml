@@ -38,7 +38,7 @@
   timeout = 60
 
 [functions."generate-rag"]
-  timeout = 90
+  timeout = 300
 
 [[headers]]
   for = "/*"
