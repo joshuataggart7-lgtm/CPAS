@@ -1,6 +1,6 @@
 // CPAS Regulatory Search
-// Full-text search over NFS, NFS CG, PCDs, PICs, PNs stored in Supabase
-// GET  ?q=1805.303&limit=5&type=NFS
+// Full-text + citation search over NFS, NFS CG, PCDs, PICs, PNs, templates, guides, forms
+// GET  ?q=1805.303&limit=8&type=NFS
 // POST { query, limit, doc_types, section }
 
 const SB_URL = process.env.SUPABASE_URL || "https://ylzdfcyiyznazvvbqdam.supabase.co";
@@ -11,6 +11,8 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type",
 };
+
+const REGULATORY = ["NFS","NFS_CG","PCD","PIC","PN","RFO_FAR","FAR_SAG"];
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers: cors, body: "" };
@@ -42,96 +44,76 @@ exports.handler = async (event) => {
       "Content-Type": "application/json",
     };
 
+    const fetchLimit = limit * 4;
+    const typeFilter = doc_types?.length ? `&doc_type=in.(${doc_types.join(",")})` : "";
     let results = [];
+    const seen = new Set(); // content dedup key
 
-    // If exact section lookup requested, do that first
-    if (section) {
-      const secRes = await fetch(
-        `${SB_URL}/rest/v1/cpas_regulatory_docs?section=eq.${encodeURIComponent(section)}&select=id,source,doc_type,section,title,content,keywords&limit=5`,
-        { headers }
-      );
-      if (secRes.ok) {
-        const secData = await secRes.json();
-        results = secData;
+    const addResults = (data) => {
+      for (const r of (data || [])) {
+        const key = r.content?.substring(0, 80) || String(r.id);
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(r);
+        }
       }
-    }
+    };
 
-    // Full-text search if query provided
-    if (query && query.trim()) {
-      const tsQuery = query.trim()
-        .replace(/[^\w\s\.\-]/g, " ")
-        .split(/\s+/)
-        .filter(Boolean)
-        .map(w => w + ":*")
-        .join(" & ");
+    const q = (query || "").trim();
+    const isCitation = /^\d{4}\.|^\d{2}\.\d{3}|^P(?:CD|IC|N)\s*\d|^NFS\s+\d|^FAR\s+\d|^18\d{2}/i.test(q);
 
-      // Fetch more than needed so we can dedupe and re-rank
-      const fetchLimit = limit * 4;
-
-      let url = `${SB_URL}/rest/v1/cpas_regulatory_docs`;
-      url += `?select=id,source,doc_type,section,title,content,keywords`;
-      url += `&search_vec=fts.${encodeURIComponent(tsQuery)}`;
-
-      if (doc_types?.length) {
-        url += `&doc_type=in.(${doc_types.join(",")})`;
-      }
-      url += `&limit=${fetchLimit}&order=id.asc`;
-
+    // ── 1. Exact section lookup ────────────────────────────────────
+    if (section || isCitation) {
+      const searchTerm = section || q;
+      const like = `%${searchTerm.replace(/[%_]/g, "")}%`;
+      const url = `${SB_URL}/rest/v1/cpas_regulatory_docs`
+        + `?select=id,source,doc_type,section,title,content,keywords`
+        + `&or=(section.ilike.${encodeURIComponent(like)},keywords.ilike.${encodeURIComponent(like)},title.ilike.${encodeURIComponent(like)})`
+        + typeFilter
+        + `&limit=${fetchLimit}&order=doc_type.asc`;
       const res = await fetch(url, { headers });
+      if (res.ok) addResults(await res.json());
+    }
 
-      if (res.ok) {
-        const data = await res.json();
-
-        // Dedupe by content prefix (catches duplicate inserts with different IDs)
-        const contentSeen = new Set(results.map(r => r.content?.substring(0, 100)));
-        const idsSeen = new Set(results.map(r => r.id));
-        for (const r of data) {
-          const contentKey = r.content?.substring(0, 100) || r.id;
-          if (!idsSeen.has(r.id) && !contentSeen.has(contentKey)) {
-            results.push(r);
-            idsSeen.add(r.id);
-            contentSeen.add(contentKey);
-          }
-        }
-
-        // Re-rank: boost regulatory docs (NFS/PCD/RFO) when query looks like a citation
-        const looksLikeCitation = /^\d{4}\.|^\d{2}\.\d{3}|^PCD|^NFS|^FAR/i.test(query.trim());
-        if (looksLikeCitation) {
-          const REGULATORY = ["NFS","NFS_CG","PCD","PIC","PN","RFO_FAR","FAR_SAG"];
-          results.sort((a, b) => {
-            const aReg = REGULATORY.includes(a.doc_type) ? 0 : 1;
-            const bReg = REGULATORY.includes(b.doc_type) ? 0 : 1;
-            // Exact section match gets top priority
-            const aExact = a.section === query.trim() ? -1 : 0;
-            const bExact = b.section === query.trim() ? -1 : 0;
-            return (aExact + aReg) - (bExact + bReg);
-          });
-        }
-
-      } else {
-        // Fallback: ILIKE search
-        const likeQuery = `%${query.replace(/[%_]/g, '')}%`;
-        const fallbackUrl = `${SB_URL}/rest/v1/cpas_regulatory_docs`
+    // ── 2. Full-text search ────────────────────────────────────────
+    if (q) {
+      const words = q.replace(/[^\w\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
+      if (words.length > 0) {
+        const tsQuery = words.map(w => w + ":*").join(" & ");
+        const url = `${SB_URL}/rest/v1/cpas_regulatory_docs`
           + `?select=id,source,doc_type,section,title,content,keywords`
-          + `&or=(title.ilike.${encodeURIComponent(likeQuery)},section.ilike.${encodeURIComponent(likeQuery)},keywords.ilike.${encodeURIComponent(likeQuery)})`
-          + `&limit=${fetchLimit}`;
-        const fallRes = await fetch(fallbackUrl, { headers });
-        if (fallRes.ok) {
-          const fallData = await fallRes.json();
-          const contentSeen = new Set(results.map(r => r.content?.substring(0, 100)));
-          const idsSeen = new Set(results.map(r => r.id));
-          for (const r of fallData) {
-            const contentKey = r.content?.substring(0, 100) || r.id;
-            if (!idsSeen.has(r.id) && !contentSeen.has(contentKey)) {
-              results.push(r);
-              idsSeen.add(r.id);
-              contentSeen.add(contentKey);
-            }
-        }
+          + `&search_vec=plfts.${encodeURIComponent(tsQuery)}`
+          + typeFilter
+          + `&limit=${fetchLimit}&order=id.asc`;
+        const res = await fetch(url, { headers });
+        if (res.ok) addResults(await res.json());
       }
     }
 
-    // Trim content for response size
+    // ── 3. Broad ILIKE fallback if still no results ────────────────
+    if (results.length === 0 && q) {
+      const like = `%${q.replace(/[%_]/g, "")}%`;
+      const url = `${SB_URL}/rest/v1/cpas_regulatory_docs`
+        + `?select=id,source,doc_type,section,title,content,keywords`
+        + `&or=(title.ilike.${encodeURIComponent(like)},content.ilike.${encodeURIComponent(like)})`
+        + typeFilter
+        + `&limit=${fetchLimit}`;
+      const res = await fetch(url, { headers });
+      if (res.ok) addResults(await res.json());
+    }
+
+    // ── 4. Re-rank: regulatory first for citation queries ──────────
+    if (isCitation && results.length > 0) {
+      results.sort((a, b) => {
+        const aExact = a.section === q ? -3 : 0;
+        const bExact = b.section === q ? -3 : 0;
+        const aReg = REGULATORY.includes(a.doc_type) ? -1 : 0;
+        const bReg = REGULATORY.includes(b.doc_type) ? -1 : 0;
+        return (aExact + aReg) - (bExact + bReg);
+      });
+    }
+
+    // ── 5. Trim and return ─────────────────────────────────────────
     const trimmed = results.slice(0, limit).map(r => ({
       id: r.id,
       source: r.source,
@@ -145,7 +127,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: cors,
-      body: JSON.stringify({ results: trimmed, count: trimmed.length, query }),
+      body: JSON.stringify({ results: trimmed, count: trimmed.length, query: q }),
     };
 
   } catch (err) {
