@@ -225,53 +225,88 @@ function buildRoadmap(intake) {
   return { lane, phases, intake };
 }
 
-async function callAI(prompt, systemPrompt, docType) {
-  // Use RAG endpoint when docType provided — grounds generation in current KB
-  // Falls back to claude.cjs proxy for non-document calls
-  const endpoint = docType
-    ? "/.netlify/functions/generate-rag"
-    : "/.netlify/functions/claude";
+// Status messages shown during generation
+const RAG_STATUS_MSGS = {
+  pending:     "Queuing document generation...",
+  fetching_kb: "Searching regulatory knowledge base (RFO FAR, NFS, PCDs)...",
+  generating:  "Generating document from current regulatory text...",
+  done:        "Complete.",
+  error:       "Error.",
+};
 
-  const body = docType
-    ? { docType, prompt, systemPrompt }
-    : { prompt, systemPrompt };
+async function callAI(prompt, systemPrompt, docType, onStatus) {
+  // For document generation — use background RAG function (no timeout, KB-grounded)
+  // For other AI calls — use claude.cjs proxy directly
+  if (!docType) {
+    try {
+      const res = await fetch("/.netlify/functions/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, systemPrompt }),
+      });
+      const data = await res.json();
+      return data.text || data.content?.[0]?.text || "Generation failed.";
+    } catch(e) { return "Error: " + e.message; }
+  }
 
   try {
-    // Use AbortController with generous timeout — JOFOC can take 45-50s with KB fetch
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 110000); // 110s client timeout
-
-    const res = await fetch(endpoint, {
+    // Step 1 — submit job to background function
+    if (onStatus) onStatus("Queuing document generation...");
+    const submitRes = await fetch("/api/generate-rag", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      body: JSON.stringify({ docType, prompt, systemPrompt }),
     });
-    clearTimeout(timer);
+    if (!submitRes.ok) throw new Error("Failed to submit job: " + submitRes.status);
+    const { jobId } = await submitRes.json();
 
-    if (!res.ok) {
-      // RAG failed — fall back to direct claude.cjs
-      if (docType) {
-        const fb = await fetch("/.netlify/functions/claude", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, systemPrompt }),
-        });
-        const fd = await fb.json();
-        return fd.text || fd.content?.[0]?.text || "Generation failed.";
+    // Step 2 — poll for result
+    const POLL_INTERVAL = 2000; // 2 seconds
+    const MAX_WAIT = 300000;    // 5 minutes max
+    const start = Date.now();
+
+    while (Date.now() - start < MAX_WAIT) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL));
+
+      const pollRes = await fetch(`/api/job-status?id=${jobId}`);
+      if (!pollRes.ok) continue;
+      const job = await pollRes.json();
+
+      // Update status message
+      if (onStatus && RAG_STATUS_MSGS[job.status]) {
+        const msg = job.status === "generating" && job.sources_used?.length
+          ? `Generating from: ${job.sources_used.slice(0,2).join(", ")}...`
+          : RAG_STATUS_MSGS[job.status];
+        onStatus(msg);
       }
-      return "Error: " + res.status;
+
+      if (job.status === "done") {
+        if (job.sources_used?.length) {
+          console.log("CPAS RAG sources:", job.sources_used.join(" | "));
+        }
+        return job.text || "Generation failed.";
+      }
+
+      if (job.status === "error") {
+        throw new Error(job.error || "Generation failed");
+      }
     }
 
-    const data = await res.json();
-    if (data.error) return "Error: " + data.error;
-    if (data.sources_used?.length) {
-      console.log("CPAS RAG:", data.sources_used.join(" | "));
-    }
-    return data.text || data.content?.[0]?.text || "Generation failed.";
+    throw new Error("Generation timed out after 5 minutes.");
+
   } catch(e) {
-    if (e.name === "AbortError") return "Error: Generation timed out — try again.";
-    return "Error: " + e.message;
+    // Fallback to direct claude.cjs if background function fails
+    console.warn("RAG fallback:", e.message);
+    if (onStatus) onStatus("Falling back to direct generation...");
+    try {
+      const res = await fetch("/.netlify/functions/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, systemPrompt }),
+      });
+      const data = await res.json();
+      return data.text || data.content?.[0]?.text || "Generation failed.";
+    } catch(e2) { return "Error: " + e2.message; }
   }
 }
 
@@ -551,7 +586,7 @@ async function downloadAsWord(docType, text, intake) {
 }
 
 
-async function generateDoc(docType, intake, roadmap) {
+async function generateDoc(docType, intake, roadmap, onStatus) {
 
   const lane = getLaneLabel(roadmap.lane);
   const ctx = "\nACQUISITION PARAMETERS:\n- Title: "+(intake.reqTitle || "NASA Requirement")+"\n- Center: "+(intake.center || "NASA")+"\n- Value: $"+((intake.value||0).toLocaleString())+"\n- Type: "+(intake.reqType)+"\n- Commercial: "+(intake.isCommercial)+"\n- Lane: "+(lane)+"\n- Competition: "+(intake.competitionStrategy)+"\n- Contract Type: "+(intake.contractType)+"\n- NAICS: "+(intake.naics || "541330")+"\n- PSC: "+(intake.psc || "R499")+"\n- Period of Performance: "+(intake.pop || "Base year + 4 option years")+"\n- Recompete: "+(intake.isRecompete)+"\n- CO: "+(intake.coName||"")+"\n- COR: "+(intake.techRepName||"");
@@ -613,7 +648,7 @@ async function generateDoc(docType, intake, roadmap) {
         CLOSEOUT:"Write a contract closeout checklist per FAR 4.804 for: \""+(t)+"\", "+(c)+", "+(v)+". Three columns: Required Action / Responsible Party / Date.",
   }
 
-  return await callAI(GENERATE_PROMPTS[docType] || "Generate a professional "+(docType)+" document for this NASA acquisition.\n"+(ctx), null, docType);
+  return await callAI(GENERATE_PROMPTS[docType] || "Generate a professional "+(docType)+" document for this NASA acquisition.\n"+(ctx), null, docType, onStatus);
 }
 
 // Applies to: Ames (ARC), Glenn (GRC), Armstrong (AFRC), Langley (LaRC)
@@ -2551,9 +2586,15 @@ function StepWorkspace({ step, intake, roadmap, onClose, onComplete, isDone }) {
   const typeLabel = { CHECK:"CHECKLIST", DECISION:"DECISION POINT", GENERATE:"DOCUMENT GENERATOR", COORDINATE:"COORDINATION PACKAGE", FORM:"FORM" };
   const typeColor = { CHECK:C.blue, DECISION:C.yellow, GENERATE:C.green, COORDINATE:C.pink, FORM:C.purple };
 
+  const [genStatus, setGenStatus] = React.useState({});
+
   async function genDoc(docType, tabKey) {
     setLoading(l=>({...l,[tabKey]:true}));
-    const content = await generateDoc(docType, intake, roadmap);
+    setGenStatus(s=>({...s,[tabKey]:"Searching regulatory knowledge base..."}));
+    const content = await generateDoc(docType, intake, roadmap, (msg) => {
+      setGenStatus(s=>({...s,[tabKey]:msg}));
+    });
+    setGenStatus(s=>({...s,[tabKey]:""}));
     setDocContent(d=>({...d,[tabKey]:content}));
     setLoading(l=>({...l,[tabKey]:false}));
     try {
@@ -2897,9 +2938,20 @@ function StepWorkspace({ step, intake, roadmap, onClose, onComplete, isDone }) {
             {curPkg && (
               <>
                 {!docContent[curPkg.key] ? (
-                  <button style={S.primaryBtn} onClick={()=>genDoc(curPkg.docType, curPkg.key)} disabled={loading[curPkg.key]}>
-                    {loading[curPkg.key] ? "... GENERATING..." : "* GENERATE "+(curPkg.label.toUpperCase())}
-                  </button>
+                  <>
+                    <button style={S.primaryBtn} onClick={()=>genDoc(curPkg.docType, curPkg.key)} disabled={loading[curPkg.key]}>
+                      {loading[curPkg.key] ? "... GENERATING..." : "* GENERATE "+(curPkg.label.toUpperCase())}
+                    </button>
+                    {loading[curPkg.key] && (
+                      <div style={{marginTop:10,padding:"8px 14px",background:"#e8f4ff",borderRadius:7,
+                        fontSize:11,color:"#1a5aaa",border:"1px solid #b3d4f5"}}>
+                        {genStatus[curPkg.key] || "Searching regulatory knowledge base..."}
+                        <div style={{fontSize:10,color:"#5a8aaa",marginTop:3}}>
+                          Grounded in RFO FAR (Mar 2026) · NFS (Apr 2026)
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <div style={S.docContent}>{docContent[curPkg.key]}</div>
