@@ -166,27 +166,65 @@ exports.handler = async (event) => {
           const result = await mammoth.extractRawText({ buffer: bytes });
           text = result.value || "";
         }
-        // Excel — extract cell text from shared strings XML inside the zip
+        // Excel — extract cell text using JSZip to parse xlsx ZIP structure
         else if (name.endsWith(".xlsx") || name.endsWith(".xls") || mimeType?.includes("spreadsheetml") || mimeType?.includes("ms-excel")) {
-          const raw = bytes.toString("utf8", 0, Math.min(bytes.length, 500000));
-          // Extract shared strings (where cell text lives in xlsx)
-          const siMatches = [...raw.matchAll(/<si>.*?<\/si>/gs)];
-          const strings = siMatches.map(m => {
-            const tMatches = [...m[0].matchAll(/<t[^>]*>([^<]*)<\/t>/g)];
-            return tMatches.map(t => t[1]).join(" ");
-          }).filter(s => s.trim().length > 0);
-          // Also grab any direct cell values
-          const vMatches = [...raw.matchAll(/<v>([^<]+)<\/v>/g)].map(m => m[1]);
-          text = [...strings, ...vMatches].join(" | ").substring(0, 50000);
+          try {
+            const JSZip = require("jszip");
+            const zip = await JSZip.loadAsync(bytes);
+            const strings = [];
+
+            // Extract shared strings (main text store in xlsx)
+            const sharedStringsFile = zip.file("xl/sharedStrings.xml");
+            if (sharedStringsFile) {
+              const xml = await sharedStringsFile.async("string");
+              const tMatches = [...xml.matchAll(/<t[^>]*>([^<]*)<\/t>/g)];
+              strings.push(...tMatches.map(m => m[1]).filter(s => s.trim()));
+            }
+
+            // Extract sheet names from workbook
+            const workbookFile = zip.file("xl/workbook.xml");
+            if (workbookFile) {
+              const xml = await workbookFile.async("string");
+              const sheetNames = [...xml.matchAll(/name="([^"]+)"/g)].map(m => m[1]);
+              if (sheetNames.length) strings.unshift("Sheets: " + sheetNames.join(", "));
+            }
+
+            text = strings.join(" | ").substring(0, 50000);
+          } catch(e) {
+            errors.push(`${name}: Excel extraction failed — ${e.message.substring(0, 80)}`);
+            continue;
+          }
         }
-        // PowerPoint — extract text from slide XML inside the zip
+        // PowerPoint — extract slide text using JSZip
         else if (name.endsWith(".pptx") || mimeType?.includes("presentationml")) {
-          const raw = bytes.toString("utf8", 0, Math.min(bytes.length, 500000));
-          // Extract all text runs from slide XML
-          const tMatches = [...raw.matchAll(/<a:t>([^<]+)<\/a:t>/g)].map(m => m[1]);
-          // Extract slide titles separately
-          const titleMatches = [...raw.matchAll(/<p:sp>.*?<p:ph[^>]*type="title"[^>]*\/>.*?<a:t>([^<]+)<\/a:t>/gs)].map(m => m[1]);
-          text = [...titleMatches.map(t => `SLIDE: ${t}`), ...tMatches].join("\n").substring(0, 50000);
+          try {
+            const JSZip = require("jszip");
+            const zip = await JSZip.loadAsync(bytes);
+            const slideTexts = [];
+
+            // Get all slide files sorted by number
+            const slideFiles = Object.keys(zip.files)
+              .filter(f => f.match(/^ppt\/slides\/slide\d+\.xml$/))
+              .sort((a, b) => {
+                const na = parseInt(a.match(/\d+/)[0]);
+                const nb = parseInt(b.match(/\d+/)[0]);
+                return na - nb;
+              });
+
+            for (const slidePath of slideFiles) {
+              const xml = await zip.file(slidePath).async("string");
+              const tMatches = [...xml.matchAll(/<a:t>([^<]+)<\/a:t>/g)].map(m => m[1].trim()).filter(Boolean);
+              if (tMatches.length) {
+                const slideNum = slidePath.match(/\d+/)[0];
+                slideTexts.push(`Slide ${slideNum}: ${tMatches.join(" ")}`);
+              }
+            }
+
+            text = slideTexts.join("\n").substring(0, 50000);
+          } catch(e) {
+            errors.push(`${name}: PowerPoint extraction failed — ${e.message.substring(0, 80)}`);
+            continue;
+          }
         }
         // PDF — text-based extraction
         else if (name.endsWith(".pdf") || mimeType?.includes("pdf")) {
