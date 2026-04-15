@@ -70,7 +70,7 @@ exports.handler = async (event) => {
         + `?select=id,source,doc_type,section,title,content,keywords`
         + `&or=(section.ilike.${encodeURIComponent(like)},keywords.ilike.${encodeURIComponent(like)},title.ilike.${encodeURIComponent(like)})`
         + typeFilter
-        + `&limit=${fetchLimit}&order=doc_type.asc`;
+        + `&limit=${fetchLimit}`;
       const res = await fetch(url, { headers });
       if (res.ok) addResults(await res.json());
     }
@@ -84,7 +84,7 @@ exports.handler = async (event) => {
           + `?select=id,source,doc_type,section,title,content,keywords`
           + `&search_vec=plfts.${encodeURIComponent(tsQuery)}`
           + typeFilter
-          + `&limit=${fetchLimit}&order=id.asc`;
+          + `&limit=${fetchLimit}`;
         const res = await fetch(url, { headers });
         if (res.ok) addResults(await res.json());
       }
