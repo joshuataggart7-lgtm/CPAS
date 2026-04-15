@@ -31,6 +31,15 @@
 [functions."supabase-test"]
   timeout = 15
 
+[functions."upload-chunk"]
+  timeout = 300
+
+[functions."supabase-admin"]
+  timeout = 60
+
+[functions."generate-rag"]
+  timeout = 60
+
 [[headers]]
   for = "/*"
   [headers.values]
