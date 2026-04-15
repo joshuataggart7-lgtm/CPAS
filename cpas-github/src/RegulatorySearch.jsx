@@ -37,8 +37,13 @@ export default function RegulatorySearch({ onClose }) {
   const [filterType, setFilterType] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchMsg, setSearchMsg] = useState("");
   const [expanded, setExpanded] = useState(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastQuery, setLastQuery] = useState("");
+  const PAGE_SIZE = 10;
 
   // Seed state
   const [seedStatus, setSeedStatus] = useState("idle"); // idle | loading | seeding | done | error
@@ -46,15 +51,16 @@ export default function RegulatorySearch({ onClose }) {
   const [seedMsg, setSeedMsg] = useState("");
   const [clearFirst, setClearFirst] = useState(true);
 
-  async function doSearch(q) {
+  async function doSearch(q, pageNum = 1, append = false) {
     if (!q.trim()) return;
-    setSearching(true);
-    setSearchMsg("Searching...");
-    setResults([]);
+    if (append) setLoadingMore(true);
+    else { setSearching(true); setResults([]); setExpanded(null); }
+    setSearchMsg(append ? "" : "Searching...");
     try {
       const body = {
         query: q.trim(),
-        limit: 10,
+        limit: PAGE_SIZE,
+        offset: (pageNum - 1) * PAGE_SIZE,
         doc_types: filterType ? [filterType] : null,
       };
       const res = await fetch("/.netlify/functions/regulatory-search", {
@@ -64,16 +70,24 @@ export default function RegulatorySearch({ onClose }) {
       });
       const data = await res.json();
       if (data.results?.length) {
-        setResults(data.results);
-        setSearchMsg(`${data.count} result${data.count !== 1 ? "s" : ""} found`);
+        setResults(r => append ? [...r, ...data.results] : data.results);
+        setHasMore(data.results.length === PAGE_SIZE);
+        setPage(pageNum);
+        setLastQuery(q.trim());
+        setSearchMsg(`${append ? "Showing more results" : data.count + " result" + (data.count !== 1 ? "s" : "") + " found"}`);
       } else {
-        setResults([]);
-        setSearchMsg("No results found. Try different keywords or check that the knowledge base is seeded.");
+        if (!append) { setResults([]); setHasMore(false); }
+        setSearchMsg(append ? "No more results." : "No results found. Try different keywords or check that the knowledge base is seeded.");
       }
     } catch(e) {
       setSearchMsg("Search error: " + e.message);
     }
-    setSearching(false);
+    if (append) setLoadingMore(false);
+    else setSearching(false);
+  }
+
+  async function loadMore() {
+    await doSearch(lastQuery || query, page + 1, true);
   }
 
   async function runSeed() {
@@ -312,6 +326,19 @@ export default function RegulatorySearch({ onClose }) {
               </div>
             );
           })}
+
+          {/* Load More */}
+          {hasMore && !searching && results.length > 0 && (
+            <div style={{ textAlign:"center", marginTop:12, marginBottom:4 }}>
+              <button onClick={loadMore} disabled={loadingMore}
+                style={{ background:loadingMore ? C.bg3 : C.bg2,
+                  border:`1px solid ${C.border}`, color:C.blue,
+                  padding:"9px 24px", borderRadius:8, cursor:loadingMore ? "default" : "pointer",
+                  fontSize:12, fontWeight:"500", fontFamily:FONT }}>
+                {loadingMore ? "Loading..." : "Load more results"}
+              </button>
+            </div>
+          )}
 
           {!searching && results.length === 0 && query && !searchMsg.includes("result") && (
             <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
