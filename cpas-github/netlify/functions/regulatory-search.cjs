@@ -13,13 +13,20 @@ const cors = {
 
 const REGULATORY = ["FAR","NFS","NFS_CG","PCD","PIC","PN","RFO_FAR","FAR_SAG"];
 
-// Priority order: FAR/NFS/NFS_CG > TEMPLATE > PCD/PIC/PN/FAR_SAG > GUIDE/FORM
+// Priority order per NASA regulatory hierarchy:
+// RFO FAR (Mar 2026) > NFS (Apr 2026) > NFS_CG > PIC > PN > PCD > TEMPLATE > FAR (codified) > FAR_SAG > GUIDE > FORM
 const DOC_PRIORITY = {
-  FAR: 30, NFS: 28, NFS_CG: 26,
-  TEMPLATE: 20,
-  PCD: 12, PIC: 10, PN: 10, FAR_SAG: 12,
-  RFO_FAR: 15,
-  GUIDE: 8, FORM: 5,
+  RFO_FAR:  50,  // RFO FAR March 2026 — highest authority
+  NFS:      45,  // NFS April 2026
+  NFS_CG:   40,  // NFS Companion Guide
+  PIC:      35,  // Procurement Information Circulars
+  PN:       30,  // Procurement Notices
+  PCD:      25,  // Procurement Class Deviations
+  TEMPLATE: 20,  // Agency-wide templates
+  FAR:      15,  // Codified FAR (pre-RFO — lower since RFO supersedes)
+  FAR_SAG:  10,  // FAR Strategic Acquisition Guide
+  GUIDE:     8,  // Procurement guides
+  FORM:      5,  // Forms
 };
 
 function score(r, q) {
@@ -28,8 +35,10 @@ function score(r, q) {
   const section = (r.section || "").toLowerCase();
   const keywords = (r.keywords || "").toLowerCase();
   const title = (r.title || "").toLowerCase();
+  const content = (r.content || "").toLowerCase();
+  const REGULATORY = ["RFO_FAR","NFS","NFS_CG","PIC","PN","PCD"];
 
-  // Doc type base priority
+  // Doc type base priority — regulatory always outranks templates
   s += DOC_PRIORITY[r.doc_type] || 0;
 
   // Section match bonuses
@@ -37,14 +46,24 @@ function score(r, q) {
   if (section.startsWith(ql))   s += 30;
   if (section.includes(ql))     s += 20;
 
-  // Keyword and title matches
+  // Keywords contain query
   if (keywords.includes(ql))    s += 15;
-  if (title.includes(ql))       s += 8;
 
-  // Extra boost for NFS/FAR on citation-style queries
+  // Title match — reduced weight so templates don't dominate on name matches
+  if (title === ql)             s += 10;
+  if (title.startsWith(ql))     s += 6;
+  if (title.includes(ql))       s += 3;
+
+  // Regulatory content match gets extra boost — substantive text over fill-in-the-blank
+  if (content.includes(ql) && REGULATORY.includes(r.doc_type)) s += 12;
+
+  // Citation-specific boosts
   if ((r.doc_type === "NFS" || r.doc_type === "NFS_CG") && ql.match(/^18\d{2}/)) s += 20;
-  if ((r.doc_type === "FAR" || r.doc_type === "FAR_SAG") && ql.match(/^(far|\d{1,2}\.\d)/i)) s += 20;
+  if (r.doc_type === "RFO_FAR" && ql.match(/^(far|\d{1,2}\.\d|part\s*\d)/i)) s += 20;
+  if ((r.doc_type === "FAR" || r.doc_type === "FAR_SAG") && ql.match(/^(far|\d{1,2}\.\d)/i)) s += 10;
   if (r.doc_type === "PCD" && ql.match(/^pcd/i)) s += 20;
+  if (r.doc_type === "PIC" && ql.match(/^pic/i)) s += 20;
+  if (r.doc_type === "PN" && ql.match(/^pn/i)) s += 20;
 
   return s;
 }
@@ -114,15 +133,30 @@ exports.handler = async (event) => {
     // ── 4. Source name match (e.g. searching "PCD 25-16" directly) ──────
     add(await sbFetch(`${base}&source=ilike.${enc(like(q))}${typeFilter}&limit=${limit * 2}`, h));
 
-    // ── Rank by score, return top N ──────────────────────────────────────
-    const ranked = [...byId.values()]
+    // ── Rank, apply source diversity, return top N ───────────────────────
+    const scored = [...byId.values()]
       .map(r => ({ ...r, _score: score(r, q) }))
-      .sort((a, b) => b._score - a._score)
-      .slice(0, limit)
-      .map(({ _score, ...r }) => ({
-        ...r,
-        content: r.content?.substring(0, 1200) || "",
-      }));
+      .sort((a, b) => b._score - a._score);
+
+    // Max chunks per source — prevents one template flooding all 10 results
+    const REGULATORY_TYPES = ["RFO_FAR","NFS","NFS_CG","PIC","PN","PCD"];
+    const sourceCounts = {};
+    const diverse = [];
+    for (const r of scored) {
+      const sourceKey = (r.source || "").substring(0, 60);
+      const maxPerSource = REGULATORY_TYPES.includes(r.doc_type) ? 3 : 2;
+      sourceCounts[sourceKey] = (sourceCounts[sourceKey] || 0);
+      if (sourceCounts[sourceKey] < maxPerSource) {
+        diverse.push(r);
+        sourceCounts[sourceKey]++;
+      }
+      if (diverse.length >= limit * 2) break; // collect extra then trim
+    }
+
+    const ranked = diverse.slice(0, limit).map(({ _score, ...r }) => ({
+      ...r,
+      content: r.content?.substring(0, 1200) || "",
+    }));
 
     return {
       statusCode: 200,
