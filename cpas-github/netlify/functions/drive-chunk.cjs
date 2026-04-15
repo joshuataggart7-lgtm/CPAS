@@ -283,10 +283,13 @@ function chunkText(text, source, doc_type, fileName) {
 
 // ── Supabase insert ───────────────────────────────────────────────
 async function insertBatch(chunks, clearFirst = false) {
+  // Use service role key if available for seeding (bypasses RLS)
+  const insertKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SB_KEY;
+
   const headers = {
     "Content-Type": "application/json",
-    "apikey": SB_KEY,
-    "Authorization": `Bearer ${SB_KEY}`,
+    "apikey": insertKey,
+    "Authorization": `Bearer ${insertKey}`,
     "Prefer": "return=minimal",
   };
 
@@ -303,8 +306,15 @@ async function insertBatch(chunks, clearFirst = false) {
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Supabase insert failed: ${err.substring(0, 200)}`);
+    const contentType = res.headers.get("content-type") || "";
+    let err;
+    if (contentType.includes("json")) {
+      const json = await res.json();
+      err = JSON.stringify(json);
+    } else {
+      err = await res.text();
+    }
+    throw new Error(`Supabase insert failed (${res.status}): ${err.substring(0, 300)}`);
   }
   return chunks.length;
 }
