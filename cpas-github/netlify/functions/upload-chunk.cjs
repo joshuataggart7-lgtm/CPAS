@@ -161,17 +161,37 @@ exports.handler = async (event) => {
         let text = "";
 
         // Word docs — use mammoth
-        if (name.endsWith(".docx") || mimeType?.includes("wordprocessingml")) {
+        if (name.endsWith(".docx") || mimeType?.includes("wordprocessingml.document")) {
           const mammoth = require("mammoth");
           const result = await mammoth.extractRawText({ buffer: bytes });
           text = result.value || "";
         }
+        // Excel — extract cell text from shared strings XML inside the zip
+        else if (name.endsWith(".xlsx") || name.endsWith(".xls") || mimeType?.includes("spreadsheetml") || mimeType?.includes("ms-excel")) {
+          const raw = bytes.toString("utf8", 0, Math.min(bytes.length, 500000));
+          // Extract shared strings (where cell text lives in xlsx)
+          const siMatches = [...raw.matchAll(/<si>.*?<\/si>/gs)];
+          const strings = siMatches.map(m => {
+            const tMatches = [...m[0].matchAll(/<t[^>]*>([^<]*)<\/t>/g)];
+            return tMatches.map(t => t[1]).join(" ");
+          }).filter(s => s.trim().length > 0);
+          // Also grab any direct cell values
+          const vMatches = [...raw.matchAll(/<v>([^<]+)<\/v>/g)].map(m => m[1]);
+          text = [...strings, ...vMatches].join(" | ").substring(0, 50000);
+        }
+        // PowerPoint — extract text from slide XML inside the zip
+        else if (name.endsWith(".pptx") || mimeType?.includes("presentationml")) {
+          const raw = bytes.toString("utf8", 0, Math.min(bytes.length, 500000));
+          // Extract all text runs from slide XML
+          const tMatches = [...raw.matchAll(/<a:t>([^<]+)<\/a:t>/g)].map(m => m[1]);
+          // Extract slide titles separately
+          const titleMatches = [...raw.matchAll(/<p:sp>.*?<p:ph[^>]*type="title"[^>]*\/>.*?<a:t>([^<]+)<\/a:t>/gs)].map(m => m[1]);
+          text = [...titleMatches.map(t => `SLIDE: ${t}`), ...tMatches].join("\n").substring(0, 50000);
+        }
         // PDF — text-based extraction
         else if (name.endsWith(".pdf") || mimeType?.includes("pdf")) {
           text = bytes.toString("utf8", 0, Math.min(bytes.length, 800000));
-          // Check if binary PDF
           if (text.startsWith("%PDF") && text.substring(0, 2000).includes("stream")) {
-            // Try to extract text between stream markers
             const matches = [...text.matchAll(/BT\s*(.*?)\s*ET/gs)].map(m => m[1]);
             if (matches.length > 0) {
               text = matches.join("\n").replace(/\(([^)]+)\)/g, "$1").replace(/[^\x20-\x7E\n]/g, " ");
@@ -182,9 +202,14 @@ exports.handler = async (event) => {
           }
           text = text.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ").replace(/\s{3,}/g, "\n\n");
         }
-        // Plain text
+        // Plain text / markdown / csv
+        else if (name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".csv")) {
+          text = bytes.toString("utf8").substring(0, 50000);
+        }
+        // Unsupported
         else {
-          text = bytes.toString("utf8");
+          errors.push(`${name}: unsupported file type — use .docx, .xlsx, .pptx, .pdf, or .txt`);
+          continue;
         }
 
         if (!text || text.trim().length < 100) {
