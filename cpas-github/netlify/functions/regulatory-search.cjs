@@ -11,7 +11,16 @@ const cors = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-const REGULATORY = ["NFS","NFS_CG","PCD","PIC","PN","RFO_FAR","FAR_SAG"];
+const REGULATORY = ["FAR","NFS","NFS_CG","PCD","PIC","PN","RFO_FAR","FAR_SAG"];
+
+// Priority order: FAR/NFS/NFS_CG > TEMPLATE > PCD/PIC/PN/FAR_SAG > GUIDE/FORM
+const DOC_PRIORITY = {
+  FAR: 30, NFS: 28, NFS_CG: 26,
+  TEMPLATE: 20,
+  PCD: 12, PIC: 10, PN: 10, FAR_SAG: 12,
+  RFO_FAR: 15,
+  GUIDE: 8, FORM: 5,
+};
 
 function score(r, q) {
   let s = 0;
@@ -20,15 +29,23 @@ function score(r, q) {
   const keywords = (r.keywords || "").toLowerCase();
   const title = (r.title || "").toLowerCase();
 
-  if (REGULATORY.includes(r.doc_type)) s += 10;
-  if (section === ql)              s += 50;
-  if (section.startsWith(ql))      s += 30;
-  if (section.includes(ql))        s += 20;
-  if (keywords.includes(ql))       s += 15;
-  if (title.includes(ql))          s += 8;
-  if ((r.doc_type === "NFS" || r.doc_type === "NFS_CG") && ql.match(/^18\d{2}/)) s += 15;
-  if (r.doc_type === "RFO_FAR" && ql.match(/^(far|part|\d{1,2}\.\d)/i)) s += 15;
+  // Doc type base priority
+  s += DOC_PRIORITY[r.doc_type] || 0;
+
+  // Section match bonuses
+  if (section === ql)           s += 50;
+  if (section.startsWith(ql))   s += 30;
+  if (section.includes(ql))     s += 20;
+
+  // Keyword and title matches
+  if (keywords.includes(ql))    s += 15;
+  if (title.includes(ql))       s += 8;
+
+  // Extra boost for NFS/FAR on citation-style queries
+  if ((r.doc_type === "NFS" || r.doc_type === "NFS_CG") && ql.match(/^18\d{2}/)) s += 20;
+  if ((r.doc_type === "FAR" || r.doc_type === "FAR_SAG") && ql.match(/^(far|\d{1,2}\.\d)/i)) s += 20;
   if (r.doc_type === "PCD" && ql.match(/^pcd/i)) s += 20;
+
   return s;
 }
 
@@ -68,9 +85,18 @@ exports.handler = async (event) => {
     const base = `${SB_URL}/rest/v1/cpas_regulatory_docs?select=id,source,doc_type,section,title,content,keywords`;
     const L = limit * 4;
 
-    // Deduplicate strictly by row ID — prevents any cross-strategy duplication
+    // Deduplicate by both row ID AND content prefix (catches DB-level duplicates)
     const byId = new Map();
-    const add = (rows) => { for (const r of rows) { if (!byId.has(r.id)) byId.set(r.id, r); } };
+    const contentSeen = new Set();
+    const add = (rows) => {
+      for (const r of rows) {
+        const contentKey = (r.content || "").substring(0, 120).trim();
+        if (!byId.has(r.id) && !contentSeen.has(contentKey)) {
+          byId.set(r.id, r);
+          if (contentKey) contentSeen.add(contentKey);
+        }
+      }
+    };
 
     const enc = (s) => encodeURIComponent(s);
     const like = (s) => `%${s.replace(/[%_]/g, "")}%`;
