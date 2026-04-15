@@ -121,7 +121,12 @@ async function extractText(file, token) {
     // PDF — extract text from plain-text PDFs (NASA's are text-based)
     if (mimeType === "application/pdf" || name.endsWith(".pdf")) {
       const text = bytes.toString("utf8", 0, Math.min(bytes.length, 500000));
-      // Clean up binary artifacts — keep only printable ASCII + common whitespace
+      // Check if this is a true binary PDF (not a text-based one)
+      if (text.startsWith("%PDF") && text.includes("stream")) {
+        // Binary PDF — skip, can't extract without pdf parsing library
+        return null;
+      }
+      // Clean up any non-printable characters
       return text.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ")
                  .replace(/\s{3,}/g, "\n\n")
                  .trim();
@@ -281,6 +286,15 @@ function chunkText(text, source, doc_type, fileName) {
   return chunks;
 }
 
+function sanitize(str) {
+  if (!str) return "";
+  // Remove null bytes and other characters that break PostgreSQL
+  return str.replace(/\0/g, "")
+            .replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]/g, " ")
+            .trim()
+            .substring(0, 4000);
+}
+
 // ── Supabase insert ───────────────────────────────────────────────
 async function insertBatch(chunks, clearFirst = false) {
   // Use service role key if available for seeding (bypasses RLS)
@@ -302,7 +316,14 @@ async function insertBatch(chunks, clearFirst = false) {
   const res = await fetch(`${SB_URL}/rest/v1/cpas_regulatory_docs`, {
     method: "POST",
     headers,
-    body: JSON.stringify(chunks),
+    body: JSON.stringify(chunks.map(c => ({
+      ...c,
+      source:   sanitize(c.source),
+      section:  sanitize(c.section),
+      title:    sanitize(c.title),
+      content:  sanitize(c.content),
+      keywords: sanitize(c.keywords),
+    }))),
   });
 
   if (!res.ok) {
@@ -358,8 +379,28 @@ exports.handler = async (event) => {
       })};
     }
 
-    // Walk folder tree and collect all files
-    const allFiles = await walkFolder(folderId, token, "");
+    // Support single-subfolder mode for chunked processing
+    // body.subfolder_id = process one specific folder only
+    // body.list_only = just return folder list without processing
+    const subFolderId = body.subfolder_id || null;
+    const listOnly = body.list_only === true;
+
+    // If listing only — return all subfolders so UI can call one at a time
+    if (listOnly) {
+      const topLevel = await getAllFiles(folderId, token);
+      const subfolders = topLevel.filter(f =>
+        f.mimeType === "application/vnd.google-apps.folder"
+      );
+      return {
+        statusCode: 200,
+        headers: cors,
+        body: JSON.stringify({ subfolders, total: subfolders.length }),
+      };
+    }
+
+    // Walk only the requested subfolder, or root if none specified
+    const targetId = subFolderId || folderId;
+    const allFiles = await walkFolder(targetId, token, "");
 
     // Process each file
     let totalChunks = 0;
@@ -367,36 +408,32 @@ exports.handler = async (event) => {
     let skipped = 0;
     let errors = [];
     let batch = [];
-
-    const clearOnFirst = clearFirst;
+    const clearOnFirst = clearFirst && !subFolderId; // only clear on first subfolder
     let firstBatch = true;
 
     for (const file of allFiles) {
-      // Skip hidden files and unsupported types
-      if (file.name.startsWith(".") || file.name.startsWith("~")) {
-        skipped++;
-        continue;
+      if (file.name.startsWith(".") || file.name.startsWith("~$")) {
+        skipped++; continue;
       }
 
       const text = await extractText(file, token);
       if (!text || text.trim().length < 50) {
-        skipped++;
-        continue;
+        skipped++; continue;
       }
 
       const { doc_type, source } = classifyFile(file.name, file.folderPath);
       const chunks = chunkText(text, source, doc_type, file.name);
-
       batch.push(...chunks);
       processed++;
 
-      // Insert in batches
       if (batch.length >= BATCH_SIZE) {
         try {
           await insertBatch(batch, clearOnFirst && firstBatch);
           totalChunks += batch.length;
           firstBatch = false;
           batch = [];
+          // Small delay to avoid rate limiting
+          await new Promise(r => setTimeout(r, 200));
         } catch(e) {
           errors.push(e.message);
           batch = [];
@@ -404,7 +441,6 @@ exports.handler = async (event) => {
       }
     }
 
-    // Insert remaining
     if (batch.length > 0) {
       try {
         await insertBatch(batch, clearOnFirst && firstBatch);
