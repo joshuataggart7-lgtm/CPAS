@@ -212,6 +212,7 @@ export default function RegulatorySearch({ onClose }) {
       <div style={{ display:"flex", gap:8, marginBottom:20 }}>
         {tabBtn("search", "🔍 Search")}
         {tabBtn("seed", "⚙️ Seed / Admin")}
+        {tabBtn("upload", "📤 Upload Documents")}
       </div>
 
       {/* SEARCH TAB */}
@@ -468,6 +469,214 @@ GRANT USAGE, SELECT ON SEQUENCE cpas_regulatory_docs_id_seq TO anon, authenticat
           </div>
         </div>
       )}
+      {tab === "upload" && (
+        <UploadTab seedToken={SEED_TOKEN} C={C} FONT={FONT} />
+      )}
+    </div>
+  );
+}
+
+// ── Upload Tab Component ──────────────────────────────────────────
+function UploadTab({ seedToken, C, FONT }) {
+  const [files, setFiles] = React.useState([]);
+  const [docType, setDocType] = React.useState("RFO_FAR");
+  const [status, setStatus] = React.useState("idle");
+  const [msg, setMsg] = React.useState("");
+  const [progress, setProgress] = React.useState({ done: 0, total: 0 });
+  const [clearSource, setClearSource] = React.useState(true);
+  const inp = { background:"#fff", border:`1px solid ${C.border}`, color:C.text,
+    padding:"8px 12px", borderRadius:8, fontSize:12, width:"100%",
+    boxSizing:"border-box", fontFamily:FONT, outline:"none" };
+
+  function onDrop(e) {
+    e.preventDefault();
+    const dropped = [...(e.dataTransfer?.files || e.target?.files || [])];
+    setFiles(f => [...f, ...dropped]);
+  }
+
+  function removeFile(i) {
+    setFiles(f => f.filter((_, idx) => idx !== i));
+  }
+
+  async function upload() {
+    if (!files.length) return;
+    setStatus("uploading");
+    setProgress({ done: 0, total: files.length });
+    setMsg(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}...`);
+
+    let totalChunks = 0, totalErrors = 0;
+
+    // Process in batches of 5 to keep payload size manageable
+    const BATCH = 5;
+    for (let i = 0; i < files.length; i += BATCH) {
+      const batch = files.slice(i, i + BATCH);
+      setMsg(`Processing files ${i+1}–${Math.min(i+BATCH, files.length)} of ${files.length}...`);
+
+      try {
+        // Read files as base64
+        const fileData = await Promise.all(batch.map(f => new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = e => res({
+            name: f.name,
+            mimeType: f.type,
+            data: e.target.result.split(",")[1], // base64 only
+          });
+          reader.onerror = rej;
+          reader.readAsDataURL(f);
+        })));
+
+        const response = await fetch("/.netlify/functions/upload-chunk", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${seedToken}`,
+          },
+          body: JSON.stringify({ files: fileData, doc_type: docType, clear_source: clearSource }),
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          totalErrors++;
+          console.error("Upload error:", data.error);
+        } else {
+          totalChunks += data.chunks_inserted || 0;
+          totalErrors += data.errors || 0;
+        }
+      } catch(e) {
+        totalErrors += batch.length;
+        console.error("Batch error:", e.message);
+      }
+
+      setProgress({ done: Math.min(i + BATCH, files.length), total: files.length });
+    }
+
+    setStatus("done");
+    setMsg(`✓ Complete — ${totalChunks.toLocaleString()} chunks indexed from ${files.length} files` +
+      (totalErrors > 0 ? ` (${totalErrors} errors)` : "."));
+  }
+
+  const DOC_TYPES = [
+    ["RFO_FAR", "RFO FAR (Revolutionary FAR Overhaul)"],
+    ["FAR_SAG", "FAR Strategic Acquisition Guide (SAG)"],
+    ["NFS", "NASA FAR Supplement (NFS)"],
+    ["NFS_CG", "NFS Companion Guide"],
+    ["PCD", "Procurement Class Deviation (PCD)"],
+    ["GUIDE", "Procurement Guide"],
+    ["TEMPLATE", "Procurement Template"],
+    ["FORM", "Standard Form"],
+    ["OTHER", "Other"],
+  ];
+
+  const pct = progress.total > 0 ? Math.round(progress.done / progress.total * 100) : 0;
+
+  return (
+    <div style={{ maxWidth: 700 }}>
+      <div style={{ background:"#e6f1fb", border:"1px solid #b5d4f4", borderRadius:8,
+        padding:"10px 14px", marginBottom:16, fontSize:11, color:"#185fa5", lineHeight:1.6 }}>
+        <strong>Direct Upload.</strong> Upload any regulatory or template document directly into
+        the CPAS knowledge base. Select the correct doc type, drop your files, and click Upload.
+        Works for NFS, PCDs, PNs, PICs, RFO FAR, templates, guides, and forms.
+        To update a document later — just re-upload it with "Replace existing chunks" checked.
+      </div>
+
+      <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:10, padding:"20px" }}>
+
+        {/* Doc type selector */}
+        <div style={{ fontSize:10, color:C.muted, fontWeight:"600", textTransform:"uppercase",
+          letterSpacing:"0.5px", marginBottom:4 }}>Document Type</div>
+        <select style={{ ...inp, marginBottom:14 }} value={docType}
+          onChange={e => setDocType(e.target.value)}>
+          {DOC_TYPES.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+
+        <label style={{ display:"flex", gap:8, alignItems:"center", fontSize:12,
+          color:C.text, cursor:"pointer", marginBottom:14 }}>
+          <input type="checkbox" checked={clearSource}
+            onChange={e => setClearSource(e.target.checked)} />
+          Replace existing chunks for these files (recommended for re-uploads)
+        </label>
+
+        {/* Drop zone */}
+        <div
+          onDrop={onDrop} onDragOver={e => e.preventDefault()}
+          onClick={() => document.getElementById("reg-file-input").click()}
+          style={{ border:`2px dashed ${C.border}`, borderRadius:10, padding:"32px",
+            textAlign:"center", cursor:"pointer", background:C.bg3, marginBottom:14,
+            transition:"border-color 0.2s" }}>
+          <div style={{ fontSize:24, marginBottom:8 }}>📄</div>
+          <div style={{ fontSize:13, fontWeight:"500", color:C.text, marginBottom:4 }}>
+            Drop files here or click to browse
+          </div>
+          <div style={{ fontSize:11, color:C.muted }}>
+            Word (.docx) and PDF files — select multiple at once
+          </div>
+          <input id="reg-file-input" type="file" multiple
+            accept=".docx,.pdf,.txt,.doc"
+            style={{ display:"none" }} onChange={onDrop} />
+        </div>
+
+        {/* File list */}
+        {files.length > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>
+              {files.length} file{files.length !== 1 ? "s" : ""} selected
+            </div>
+            <div style={{ maxHeight:160, overflowY:"auto", background:C.bg3,
+              borderRadius:8, padding:"8px 12px" }}>
+              {files.map((f, i) => (
+                <div key={i} style={{ display:"flex", justifyContent:"space-between",
+                  alignItems:"center", padding:"3px 0",
+                  borderBottom: i < files.length-1 ? `1px solid ${C.border}` : "none" }}>
+                  <span style={{ fontSize:11, color:C.text }}>
+                    {f.name} <span style={{ color:C.muted }}>({(f.size/1024).toFixed(0)}KB)</span>
+                  </span>
+                  <button onClick={() => removeFile(i)}
+                    style={{ background:"none", border:"none", color:C.muted,
+                      cursor:"pointer", fontSize:14, padding:"0 4px" }}>×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Progress */}
+        {status === "uploading" && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ background:C.bg3, borderRadius:8, height:8, marginBottom:6, overflow:"hidden" }}>
+              <div style={{ background:C.blue, height:"100%", width:`${pct}%`,
+                transition:"width 0.3s", borderRadius:8 }} />
+            </div>
+            <div style={{ fontSize:11, color:C.muted }}>{msg}</div>
+          </div>
+        )}
+
+        {status === "done" && (
+          <div style={{ background:"#e1f5ee", border:"1px solid #9fe1cb", borderRadius:8,
+            padding:"10px 14px", marginBottom:14, fontSize:12, color:"#0f6e56" }}>
+            {msg}
+          </div>
+        )}
+
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={upload}
+            disabled={!files.length || status === "uploading"}
+            style={{ flex:1, background: files.length && status !== "uploading" ? C.blue : C.bg3,
+              border:"none", color: files.length && status !== "uploading" ? "#fff" : C.muted,
+              padding:"11px", borderRadius:8,
+              cursor: files.length && status !== "uploading" ? "pointer" : "default",
+              fontSize:13, fontWeight:"500", fontFamily:FONT }}>
+            {status === "uploading" ? `Uploading... (${pct}%)` : `Upload & Index ${files.length || ""} File${files.length !== 1 ? "s" : ""}`}
+          </button>
+          {files.length > 0 && status !== "uploading" && (
+            <button onClick={() => { setFiles([]); setStatus("idle"); setMsg(""); }}
+              style={{ background:"none", border:`1px solid ${C.border}`, color:C.muted,
+                padding:"11px 16px", borderRadius:8, cursor:"pointer",
+                fontSize:12, fontFamily:FONT }}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
