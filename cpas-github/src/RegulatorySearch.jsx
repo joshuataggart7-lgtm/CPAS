@@ -78,87 +78,99 @@ export default function RegulatorySearch({ onClose }) {
 
   async function runSeed() {
     setSeedStatus("seeding");
-    setSeedMsg("Connecting to Google Drive...");
     setSeedProgress({ done: 0, total: 0, errors: 0 });
 
-    const callChunker = async (body) => {
-      const res = await fetch("/.netlify/functions/drive-chunk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SEED_TOKEN}` },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${text.substring(0, 200)}`);
-      }
-      return res.json();
-    };
+    const AUTH = { "Content-Type": "application/json", "Authorization": `Bearer ${SEED_TOKEN}` };
+    let totalChunks = 0;
+    let totalFiles = 0;
+    let errCount = 0;
 
     try {
-      // Step 1 — list all top-level subfolders
-      const listData = await callChunker({ list_only: true });
-      if (listData.error) {
-        setSeedStatus("error");
-        setSeedMsg("Failed: " + listData.error + (listData.hint ? " — " + listData.hint : ""));
-        return;
+      // ── PHASE 1: Regulatory baseline from chunks.json ─────────────
+      // Covers NFS 2026, NFS-CG, all PCDs/PICs/PNs already text-extracted
+      setSeedMsg("Phase 1/2 — Loading regulatory baseline (NFS, PCDs, PICs, PNs)...");
+      setSeedProgress({ done: 0, total: 100, errors: 0 });
+
+      try {
+        const chunkRes = await fetch("/regulatory/chunks.json");
+        if (chunkRes.ok) {
+          const chunks = await chunkRes.json();
+          const BATCH = 50;
+          let inserted = 0;
+          for (let i = 0; i < chunks.length; i += BATCH) {
+            const batch = chunks.slice(i, i + BATCH);
+            const res = await fetch("/.netlify/functions/regulatory-seed", {
+              method: "POST",
+              headers: AUTH,
+              body: JSON.stringify({ chunks: batch, clear_first: clearFirst && i === 0 }),
+            });
+            const data = await res.json();
+            inserted += data.inserted || batch.length;
+            setSeedProgress({ done: Math.round((i / chunks.length) * 50), total: 100, errors: errCount });
+            setSeedMsg(`Phase 1/2 — Regulatory baseline: ${inserted.toLocaleString()} / ${chunks.length.toLocaleString()} chunks...`);
+            await new Promise(r => setTimeout(r, 100));
+          }
+          totalChunks += inserted;
+          setSeedMsg(`Phase 1/2 — Regulatory baseline complete: ${inserted.toLocaleString()} chunks.`);
+        }
+      } catch(e) {
+        errCount++;
+        console.error("Phase 1 error:", e.message);
+        setSeedMsg("Phase 1 warning: " + e.message + " — continuing to Phase 2...");
       }
 
-      const subfolders = listData.subfolders || [];
-      const total = subfolders.length || 1;
-      setSeedMsg(`Found ${total} folder${total !== 1 ? "s" : ""} to process. Starting...`);
-      setSeedProgress({ done: 0, total, errors: 0 });
+      // ── PHASE 2: Drive Google Docs (templates, guides, forms) ─────
+      setSeedMsg("Phase 2/2 — Indexing templates, guides, and forms from Google Drive...");
 
-      // Step 2 — process each subfolder individually
-      let totalChunks = 0;
-      let totalFiles = 0;
-      let errCount = 0;
+      const callChunker = async (body) => {
+        const res = await fetch("/.netlify/functions/drive-chunk", {
+          method: "POST", headers: AUTH, body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).substring(0, 200)}`);
+        return res.json();
+      };
 
-      if (subfolders.length === 0) {
-        // No subfolders — process root directly
-        const data = await callChunker({ clear_first: clearFirst });
-        totalChunks = data.chunks_inserted || 0;
-        totalFiles = data.files_processed || 0;
-        errCount = data.errors || 0;
+      const listData = await callChunker({ list_only: true });
+      if (listData.error) {
+        errCount++;
+        setSeedMsg(`Phase 2 failed: ${listData.error}`);
       } else {
-        for (let i = 0; i < subfolders.length; i++) {
-          const sf = subfolders[i];
-          setSeedMsg(`Processing folder ${i + 1}/${subfolders.length}: ${sf.name}...`);
-          setSeedProgress({ done: i, total, errors: errCount });
+        const subfolders = listData.subfolders || [];
+        // Skip regulatory PDF folders — those are handled by Phase 1
+        const driveFolders = subfolders.filter(sf =>
+          !sf.name.includes("pcd") && !sf.name.includes("pn/") &&
+          !sf.name.includes("pic") && !sf.name.includes("01-nfs") &&
+          !sf.name.includes("02-nfs") && !sf.name.includes("07-pn")
+        );
+
+        for (let i = 0; i < driveFolders.length; i++) {
+          const sf = driveFolders[i];
+          setSeedProgress({ done: 50 + Math.round((i / driveFolders.length) * 50), total: 100, errors: errCount });
+          setSeedMsg(`Phase 2/2 — ${sf.name} (${i+1}/${driveFolders.length})...`);
           try {
-            const data = await callChunker({
-              subfolder_id: sf.id,
-              clear_first: clearFirst && i === 0,
-            });
+            const data = await callChunker({ subfolder_id: sf.id, clear_first: false, filesOnly: sf.filesOnly || false });
             totalChunks += data.chunks_inserted || 0;
-            totalFiles += data.files_processed || 0;
-            errCount += data.errors || 0;
+            totalFiles  += data.files_processed || 0;
+            errCount    += data.errors || 0;
           } catch(e) {
             errCount++;
-            console.error(`Error processing ${sf.name}:`, e.message);
+            console.error(`Drive error for ${sf.name}:`, e.message);
           }
-          setSeedProgress({ done: i + 1, total, errors: errCount });
-          // Brief pause between folders
           await new Promise(r => setTimeout(r, 300));
         }
       }
 
-      setSeedStatus(errCount === 0 ? "done" : "done");
+      setSeedProgress({ done: 100, total: 100, errors: errCount });
+      setSeedStatus("done");
       setSeedMsg(
-        `✓ Complete — ${totalChunks.toLocaleString()} chunks indexed from ${totalFiles} files` +
-        (errCount > 0 ? ` (${errCount} folder errors — check Netlify function logs)` : ".")
+        `✓ Complete — ${totalChunks.toLocaleString()} total chunks indexed` +
+        (totalFiles > 0 ? ` (${totalFiles} Drive files)` : "") +
+        (errCount > 0 ? ` · ${errCount} error(s)` : "")
       );
 
     } catch(e) {
       setSeedStatus("error");
       setSeedMsg("Error: " + e.message);
-    }
-
-    if (errors === 0) {
-      setSeedStatus("done");
-      setSeedMsg(`✓ Complete — ${done.toLocaleString()} regulatory chunks loaded into knowledge base.`);
-    } else {
-      setSeedStatus(errors < total / 2 ? "done" : "error");
-      setSeedMsg(`Finished with ${errors} errors. ${done.toLocaleString()} chunks inserted successfully.`);
     }
   }
 
