@@ -225,39 +225,32 @@ function buildRoadmap(intake) {
   return { lane, phases, intake };
 }
 
-async function callAI(prompt, systemPrompt) {
-  let apiKey = localStorage.getItem("cpas_api_key");
-  if (!apiKey) {
-    apiKey = window.prompt("Enter your Anthropic API key (sk-ant-...). Saved in browser:");
-    if (!apiKey) return "No API key provided.";
-    localStorage.setItem("cpas_api_key", apiKey.trim());
-  }
+async function callAI(prompt, systemPrompt, docType) {
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-api-key": apiKey.trim(),
-        "anthropic-version":"2023-06-01",
-        "anthropic-dangerous-direct-browser-access":"true"
-      },
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:6000,
-        system: systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional, complete procurement documents compliant with FAR and NFS. CRITICAL: Always use bracketed placeholders like [Contract No.], [Date], [Insert Name], [SAM Notice No.] for any specific document numbers, dates, names, or identifiers that must be filled in by the CO — never fabricate specific numbers, dates, or identifiers.",
-        messages:[{role:"user",content:prompt}]
-      })
+    // Route through RAG function — KB-grounded generation, API key server-side
+    const res = await fetch("/.netlify/functions/generate-rag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, systemPrompt, docType })
     });
-    const data = await res.json();
-    if (data.error) {
-      if (data.error.type === "authentication_error") {
-        localStorage.removeItem("cpas_api_key");
-        return "Invalid API key - cleared. Click Generate again to re-enter.";
-      }
-      return "API Error: "+data.error.message;
+    if (!res.ok) {
+      // Fallback to claude.cjs proxy if RAG fails
+      const fallback = await fetch("/.netlify/functions/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, systemPrompt })
+      });
+      const fd = await fallback.json();
+      return fd.text || fd.error || "Generation failed.";
     }
-    return data.content?.[0]?.text || "Generation failed.";
-  } catch(e) { return "Error: "+(e.message); }
+    const data = await res.json();
+    if (data.error) return "Error: " + data.error;
+    // Optionally show sources used — stored for transparency
+    if (data.sources_used?.length) {
+      console.log("CPAS RAG sources:", data.sources_used.join(", "));
+    }
+    return data.text || "Generation failed.";
+  } catch(e) { return "Error: " + e.message; }
 }
 
 
@@ -598,7 +591,7 @@ async function generateDoc(docType, intake, roadmap) {
         CLOSEOUT:"Write a contract closeout checklist per FAR 4.804 for: \""+(t)+"\", "+(c)+", "+(v)+". Three columns: Required Action / Responsible Party / Date.",
   }
 
-  return await callAI(GENERATE_PROMPTS[docType] || "Generate a professional "+(docType)+" document for this NASA acquisition.\n"+(ctx));
+  return await callAI(GENERATE_PROMPTS[docType] || "Generate a professional "+(docType)+" document for this NASA acquisition.\n"+(ctx), null, docType);
 }
 
 // Applies to: Ames (ARC), Glenn (GRC), Armstrong (AFRC), Langley (LaRC)
