@@ -19,7 +19,7 @@ const DOC_TYPE_COLORS = {
   FAR:     { bg:"#1a3a6e", text:"#ffffff" },
   NFS:     { bg:"#dbeafe", text:"#1e40af" },
   NFS_CG:  { bg:"#ede9fe", text:"#5b21b6" },
-  RFO_FAR: { bg:"#d1fae5", text:"#065f46" },
+  RFO_FAR: { bg:"#dc2626", text:"#ffffff" },
   FAR_SAG: { bg:"#cffafe", text:"#164e63" },
   PCD:     { bg:"#dcfce7", text:"#166534" },
   PIC:     { bg:"#fef9c3", text:"#854d0e" },
@@ -243,14 +243,15 @@ export default function RegulatorySearch({ onClose }) {
             <select value={filterType} onChange={e => setFilterType(e.target.value)}
               style={{ ...inp, width:120 }}>
               <option value="">All types</option>
-              <option value="FAR">FAR</option>
-              <option value="NFS">NFS</option>
-              <option value="NFS_CG">NFS CG</option>
-              <option value="FAR_SAG">FAR SAG</option>
-              <option value="PCD">PCD</option>
+              <option value="RFO_FAR">RFO FAR (Mar 2026)</option>
+              <option value="NFS">NFS (Apr 2026)</option>
+              <option value="NFS_CG">NFS Companion Guide</option>
               <option value="PIC">PIC</option>
               <option value="PN">PN</option>
+              <option value="PCD">PCD</option>
               <option value="TEMPLATE">Template</option>
+              <option value="FAR">FAR (Codified)</option>
+              <option value="FAR_SAG">FAR SAG</option>
               <option value="GUIDE">Guide</option>
               <option value="FORM">Form</option>
             </select>
@@ -264,7 +265,7 @@ export default function RegulatorySearch({ onClose }) {
 
           {/* Quick search chips */}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
-            {["1805.303","1806.302","1812.301","1827.409","1842.270","52.219-9","1852.216-80","PCD 25-16","PCD 26-02","sole source","JOFOC","subcontracting plan","QASP","price negotiation","source selection","data rights","SBIR"].map(q => (
+            {["1805.303-71","1806.304","1812.301","1827.409","1842.270","52.219-9","1852.216-80","PCD 25-16","PCD 26-02","sole source","JOFOC","subcontracting plan","QASP","price negotiation","source selection","data rights","SBIR"].map(q => (
               <button key={q} onClick={() => { setQuery(q); doSearch(q); }}
                 style={{ padding:"3px 10px", borderRadius:20, fontSize:10, cursor:"pointer",
                   background:C.bg3, border:`1px solid ${C.border}`, color:C.muted,
@@ -636,10 +637,10 @@ function UploadTab({ seedToken, C, FONT }) {
             Drop files here or click to browse
           </div>
           <div style={{ fontSize:11, color:C.muted }}>
-            Word (.docx) and PDF files — select multiple at once
+            Word, Excel, PowerPoint, PDF — select multiple at once
           </div>
           <input id="reg-file-input" type="file" multiple
-            accept=".docx,.pdf,.txt,.doc"
+            accept=".docx,.xlsx,.xls,.pptx,.pdf,.txt,.md,.csv"
             style={{ display:"none" }} onChange={onDrop} />
         </div>
 
