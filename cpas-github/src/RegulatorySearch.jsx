@@ -44,7 +44,7 @@ export default function RegulatorySearch({ onClose }) {
   const [seedStatus, setSeedStatus] = useState("idle"); // idle | loading | seeding | done | error
   const [seedProgress, setSeedProgress] = useState({ done: 0, total: 0, errors: 0 });
   const [seedMsg, setSeedMsg] = useState("");
-  const [clearFirst, setClearFirst] = useState(false);
+  const [clearFirst, setClearFirst] = useState(true);
 
   async function doSearch(q) {
     if (!q.trim()) return;
@@ -78,54 +78,80 @@ export default function RegulatorySearch({ onClose }) {
 
   async function runSeed() {
     setSeedStatus("seeding");
-    setSeedMsg("Connecting to Google Drive and processing files...");
+    setSeedMsg("Connecting to Google Drive...");
     setSeedProgress({ done: 0, total: 0, errors: 0 });
 
-    try {
+    const callChunker = async (body) => {
       const res = await fetch("/.netlify/functions/drive-chunk", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SEED_TOKEN}`,
-        },
-        body: JSON.stringify({ clear_first: clearFirst }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SEED_TOKEN}` },
+        body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text.substring(0, 200)}`);
+      }
+      return res.json();
+    };
 
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
+    try {
+      // Step 1 — list all top-level subfolders
+      const listData = await callChunker({ list_only: true });
+      if (listData.error) {
         setSeedStatus("error");
-        setSeedMsg("Seed failed: " + (data.error || "Unknown error") +
-          (data.hint ? " — " + data.hint : ""));
+        setSeedMsg("Failed: " + listData.error + (listData.hint ? " — " + listData.hint : ""));
         return;
       }
 
-      setSeedProgress({ done: data.chunks_inserted, total: data.chunks_inserted, errors: data.errors });
+      const subfolders = listData.subfolders || [];
+      const total = subfolders.length || 1;
+      setSeedMsg(`Found ${total} folder${total !== 1 ? "s" : ""} to process. Starting...`);
+      setSeedProgress({ done: 0, total, errors: 0 });
 
-      if (data.errors === 0) {
-        setSeedStatus("done");
-        setSeedMsg(
-          `✓ Complete — ${data.chunks_inserted.toLocaleString()} chunks indexed from ` +
-          `${data.files_processed} files (${data.files_skipped} skipped).`
-        );
+      // Step 2 — process each subfolder individually
+      let totalChunks = 0;
+      let totalFiles = 0;
+      let errCount = 0;
+
+      if (subfolders.length === 0) {
+        // No subfolders — process root directly
+        const data = await callChunker({ clear_first: clearFirst });
+        totalChunks = data.chunks_inserted || 0;
+        totalFiles = data.files_processed || 0;
+        errCount = data.errors || 0;
       } else {
-        setSeedStatus("done");
-        setSeedMsg(
-          `Finished with ${data.errors} error(s). ` +
-          `${data.chunks_inserted.toLocaleString()} chunks indexed from ${data.files_processed} files.` +
-          (data.error_details?.length ? " First error: " + data.error_details[0] : "")
-        );
+        for (let i = 0; i < subfolders.length; i++) {
+          const sf = subfolders[i];
+          setSeedMsg(`Processing folder ${i + 1}/${subfolders.length}: ${sf.name}...`);
+          setSeedProgress({ done: i, total, errors: errCount });
+          try {
+            const data = await callChunker({
+              subfolder_id: sf.id,
+              clear_first: clearFirst && i === 0,
+            });
+            totalChunks += data.chunks_inserted || 0;
+            totalFiles += data.files_processed || 0;
+            errCount += data.errors || 0;
+          } catch(e) {
+            errCount++;
+            console.error(`Error processing ${sf.name}:`, e.message);
+          }
+          setSeedProgress({ done: i + 1, total, errors: errCount });
+          // Brief pause between folders
+          await new Promise(r => setTimeout(r, 300));
+        }
       }
-      return;
+
+      setSeedStatus(errCount === 0 ? "done" : "done");
+      setSeedMsg(
+        `✓ Complete — ${totalChunks.toLocaleString()} chunks indexed from ${totalFiles} files` +
+        (errCount > 0 ? ` (${errCount} folder errors — check Netlify function logs)` : ".")
+      );
 
     } catch(e) {
       setSeedStatus("error");
-      setSeedMsg("Network error: " + e.message);
-      return;
+      setSeedMsg("Error: " + e.message);
     }
-
-    // Fallback kept for reference — unreachable
-    const errors = 0;
 
     if (errors === 0) {
       setSeedStatus("done");
