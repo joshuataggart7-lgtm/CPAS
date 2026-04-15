@@ -20,16 +20,19 @@ exports.handler = async (event) => {
   try {
     let query, limit, doc_types, section;
 
+    let offset = 0;
     if (event.httpMethod === "GET") {
       const p = event.queryStringParameters || {};
       query = p.q || "";
       limit = parseInt(p.limit) || 8;
+      offset = parseInt(p.offset) || 0;
       doc_types = p.type ? p.type.split(",") : null;
       section = p.section || null;
     } else {
       const body = JSON.parse(event.body || "{}");
       query = body.query || "";
       limit = body.limit || 8;
+      offset = body.offset || 0;
       doc_types = body.doc_types || null;
       section = body.section || null;
     }
@@ -97,7 +100,7 @@ exports.handler = async (event) => {
         + `?select=id,source,doc_type,section,title,content,keywords`
         + `&or=(title.ilike.${encodeURIComponent(like)},content.ilike.${encodeURIComponent(like)})`
         + typeFilter
-        + `&limit=${fetchLimit}`;
+        + `&limit=${fetchLimit}&offset=${offset}`;
       const res = await fetch(url, { headers });
       if (res.ok) addResults(await res.json());
     }
