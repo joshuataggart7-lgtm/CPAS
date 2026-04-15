@@ -385,16 +385,27 @@ exports.handler = async (event) => {
     const subFolderId = body.subfolder_id || null;
     const listOnly = body.list_only === true;
 
-    // If listing only — return all subfolders so UI can call one at a time
+    // If listing only — return ALL leaf folders (folders containing files)
+    // so UI can call one folder at a time without timeout
     if (listOnly) {
-      const topLevel = await getAllFiles(folderId, token);
-      const subfolders = topLevel.filter(f =>
-        f.mimeType === "application/vnd.google-apps.folder"
-      );
+      const allFolders = [];
+      async function collectLeafFolders(parentId, parentPath) {
+        const items = await getAllFiles(parentId, token);
+        const subFolders = items.filter(f => f.mimeType === "application/vnd.google-apps.folder");
+        const hasFiles = items.some(f => f.mimeType !== "application/vnd.google-apps.folder");
+        if (hasFiles || subFolders.length === 0) {
+          // This folder contains files — it's a leaf folder we want to process
+          allFolders.push({ id: parentId, name: parentPath || "root" });
+        }
+        for (const sf of subFolders) {
+          await collectLeafFolders(sf.id, (parentPath ? parentPath + "/" : "") + sf.name);
+        }
+      }
+      await collectLeafFolders(folderId, "");
       return {
         statusCode: 200,
         headers: cors,
-        body: JSON.stringify({ subfolders, total: subfolders.length }),
+        body: JSON.stringify({ subfolders: allFolders, total: allFolders.length }),
       };
     }
 
@@ -402,16 +413,24 @@ exports.handler = async (event) => {
     const targetId = subFolderId || folderId;
     const allFiles = await walkFolder(targetId, token, "");
 
-    // Process each file
+    // Process each file — with time budget to avoid timeout
+    const START_TIME = Date.now();
+    const TIME_LIMIT_MS = 45000; // stop at 45s to leave buffer before 60s timeout
+
     let totalChunks = 0;
     let processed = 0;
     let skipped = 0;
     let errors = [];
     let batch = [];
-    const clearOnFirst = clearFirst && !subFolderId; // only clear on first subfolder
+    const clearOnFirst = clearFirst && !subFolderId;
     let firstBatch = true;
 
     for (const file of allFiles) {
+      // Stop if approaching timeout
+      if (Date.now() - START_TIME > TIME_LIMIT_MS) {
+        errors.push("Time limit reached — some files skipped. Re-run seed to pick up remaining files.");
+        break;
+      }
       if (file.name.startsWith(".") || file.name.startsWith("~$")) {
         skipped++; continue;
       }
