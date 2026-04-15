@@ -19,6 +19,15 @@
 [functions."package-workflow"]
   timeout = 30
 
+[functions."drive-chunk"]
+  timeout = 300
+
+[functions."regulatory-search"]
+  timeout = 30
+
+[functions."regulatory-seed"]
+  timeout = 60
+
 [[headers]]
   for = "/*"
   [headers.values]
