@@ -58,13 +58,15 @@ exports.handler = async (event) => {
 
     // Full-text search if query provided
     if (query && query.trim()) {
-      // Sanitize query for tsquery — replace spaces with & and remove special chars
       const tsQuery = query.trim()
         .replace(/[^\w\s\.\-]/g, " ")
         .split(/\s+/)
         .filter(Boolean)
-        .map(w => w + ":*")  // prefix matching
+        .map(w => w + ":*")
         .join(" & ");
+
+      // Fetch more than needed so we can dedupe and re-rank
+      const fetchLimit = limit * 4;
 
       let url = `${SB_URL}/rest/v1/cpas_regulatory_docs`;
       url += `?select=id,source,doc_type,section,title,content,keywords`;
@@ -73,31 +75,58 @@ exports.handler = async (event) => {
       if (doc_types?.length) {
         url += `&doc_type=in.(${doc_types.join(",")})`;
       }
-      url += `&limit=${limit}&order=id.asc`;
+      url += `&limit=${fetchLimit}&order=id.asc`;
 
       const res = await fetch(url, { headers });
 
       if (res.ok) {
         const data = await res.json();
-        // Merge with section results, dedupe by id
-        const ids = new Set(results.map(r => r.id));
+
+        // Dedupe by content prefix (catches duplicate inserts with different IDs)
+        const contentSeen = new Set(results.map(r => r.content?.substring(0, 100)));
+        const idsSeen = new Set(results.map(r => r.id));
         for (const r of data) {
-          if (!ids.has(r.id)) { results.push(r); ids.add(r.id); }
+          const contentKey = r.content?.substring(0, 100) || r.id;
+          if (!idsSeen.has(r.id) && !contentSeen.has(contentKey)) {
+            results.push(r);
+            idsSeen.add(r.id);
+            contentSeen.add(contentKey);
+          }
         }
+
+        // Re-rank: boost regulatory docs (NFS/PCD/RFO) when query looks like a citation
+        const looksLikeCitation = /^\d{4}\.|^\d{2}\.\d{3}|^PCD|^NFS|^FAR/i.test(query.trim());
+        if (looksLikeCitation) {
+          const REGULATORY = ["NFS","NFS_CG","PCD","PIC","PN","RFO_FAR","FAR_SAG"];
+          results.sort((a, b) => {
+            const aReg = REGULATORY.includes(a.doc_type) ? 0 : 1;
+            const bReg = REGULATORY.includes(b.doc_type) ? 0 : 1;
+            // Exact section match gets top priority
+            const aExact = a.section === query.trim() ? -1 : 0;
+            const bExact = b.section === query.trim() ? -1 : 0;
+            return (aExact + aReg) - (bExact + bReg);
+          });
+        }
+
       } else {
-        // Fallback: ILIKE search if full-text fails (table may not have tsvector yet)
+        // Fallback: ILIKE search
         const likeQuery = `%${query.replace(/[%_]/g, '')}%`;
         const fallbackUrl = `${SB_URL}/rest/v1/cpas_regulatory_docs`
           + `?select=id,source,doc_type,section,title,content,keywords`
           + `&or=(title.ilike.${encodeURIComponent(likeQuery)},section.ilike.${encodeURIComponent(likeQuery)},keywords.ilike.${encodeURIComponent(likeQuery)})`
-          + `&limit=${limit}`;
+          + `&limit=${fetchLimit}`;
         const fallRes = await fetch(fallbackUrl, { headers });
         if (fallRes.ok) {
           const fallData = await fallRes.json();
-          const ids = new Set(results.map(r => r.id));
+          const contentSeen = new Set(results.map(r => r.content?.substring(0, 100)));
+          const idsSeen = new Set(results.map(r => r.id));
           for (const r of fallData) {
-            if (!ids.has(r.id)) { results.push(r); ids.add(r.id); }
-          }
+            const contentKey = r.content?.substring(0, 100) || r.id;
+            if (!idsSeen.has(r.id) && !contentSeen.has(contentKey)) {
+              results.push(r);
+              idsSeen.add(r.id);
+              contentSeen.add(contentKey);
+            }
         }
       }
     }

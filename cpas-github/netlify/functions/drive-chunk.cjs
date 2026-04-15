@@ -393,12 +393,20 @@ exports.handler = async (event) => {
         const items = await getAllFiles(parentId, token);
         const subFolders = items.filter(f => f.mimeType === "application/vnd.google-apps.folder");
         const hasFiles = items.some(f => f.mimeType !== "application/vnd.google-apps.folder");
-        if (hasFiles || subFolders.length === 0) {
-          // This folder contains files — it's a leaf folder we want to process
+
+        if (subFolders.length === 0) {
+          // True leaf — no subfolders, process this folder regardless of files
           allFolders.push({ id: parentId, name: parentPath || "root" });
-        }
-        for (const sf of subFolders) {
-          await collectLeafFolders(sf.id, (parentPath ? parentPath + "/" : "") + sf.name);
+        } else {
+          // Has subfolders — if it also has files at this level, add it as a leaf too
+          // but only if the files are NOT in the subfolders (i.e. mixed folder)
+          if (hasFiles) {
+            allFolders.push({ id: parentId, name: parentPath || "root", filesOnly: true });
+          }
+          // Always recurse into subfolders
+          for (const sf of subFolders) {
+            await collectLeafFolders(sf.id, (parentPath ? parentPath + "/" : "") + sf.name);
+          }
         }
       }
       await collectLeafFolders(folderId, "");
@@ -411,7 +419,10 @@ exports.handler = async (event) => {
 
     // Walk only the requested subfolder, or root if none specified
     const targetId = subFolderId || folderId;
-    const allFiles = await walkFolder(targetId, token, "");
+    const filesOnly = body.filesOnly === true;
+    const allFiles = filesOnly
+      ? (await getAllFiles(targetId, token)).filter(f => f.mimeType !== "application/vnd.google-apps.folder").map(f => ({ ...f, folderPath: "" }))
+      : await walkFolder(targetId, token, "");
 
     // Process files in parallel batches of 8 — much faster than sequential
     const PARALLEL = 8;
