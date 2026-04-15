@@ -16,6 +16,7 @@ const inp = { background:"#fff", border:`1px solid ${C.border}`, color:C.text,
   boxSizing:"border-box", fontFamily:FONT, outline:"none" };
 
 const DOC_TYPE_COLORS = {
+  FAR:     { bg:"#1a3a6e", text:"#ffffff" },
   NFS:     { bg:"#dbeafe", text:"#1e40af" },
   NFS_CG:  { bg:"#ede9fe", text:"#5b21b6" },
   RFO_FAR: { bg:"#d1fae5", text:"#065f46" },
@@ -242,9 +243,9 @@ export default function RegulatorySearch({ onClose }) {
             <select value={filterType} onChange={e => setFilterType(e.target.value)}
               style={{ ...inp, width:120 }}>
               <option value="">All types</option>
+              <option value="FAR">FAR</option>
               <option value="NFS">NFS</option>
               <option value="NFS_CG">NFS CG</option>
-              <option value="RFO_FAR">RFO FAR</option>
               <option value="FAR_SAG">FAR SAG</option>
               <option value="PCD">PCD</option>
               <option value="PIC">PIC</option>
