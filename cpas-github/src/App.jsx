@@ -225,31 +225,109 @@ function buildRoadmap(intake) {
   return { lane, phases, intake };
 }
 
+// RAG query terms by document type
+const RAG_TERMS = {
+  JOFOC:       ["6.103", "sole source", "other than full and open", "1806.3"],
+  ACQ_PLAN:    ["1807.14", "procurement strategy", "PSM"],
+  PNM:         ["15.406-3", "price negotiation", "price reasonableness"],
+  ANOSCA:      ["1805.302", "ANOSCA", "public announcement", "PCD 25-16"],
+  RESPONSIBILITY: ["9.105", "responsibility determination"],
+  MARKET_RESEARCH: ["10.001", "market research", "sources sought"],
+  SOURCES_SOUGHT: ["5.207", "sources sought"],
+  QASP:        ["1846.408", "quality assurance", "surveillance"],
+  IGCE:        ["independent government cost estimate", "IGCE"],
+  COR_LETTER:  ["1801.602", "COR", "contracting officer representative"],
+  CLAUSE_MATRIX: ["52.212", "1812.301", "commercial items"],
+  FO_EXCEPTION: ["16.505", "fair opportunity", "task order"],
+  CLOSEOUT:    ["4.804", "closeout"],
+};
+
+const RAG_DOC_TYPES = {
+  JOFOC:       "RFO_FAR,NFS,NFS_CG,PCD",
+  ACQ_PLAN:    "NFS,NFS_CG,RFO_FAR,PCD",
+  PNM:         "RFO_FAR,NFS,NFS_CG",
+  ANOSCA:      "NFS,NFS_CG,PIC,PCD",
+  RESPONSIBILITY: "RFO_FAR,NFS",
+  MARKET_RESEARCH: "RFO_FAR,NFS,NFS_CG",
+  SOURCES_SOUGHT: "RFO_FAR,NFS",
+  QASP:        "NFS,NFS_CG,RFO_FAR",
+  IGCE:        "NFS,NFS_CG",
+  COR_LETTER:  "NFS,NFS_CG",
+  CLAUSE_MATRIX: "NFS,RFO_FAR,PCD",
+  FO_EXCEPTION: "RFO_FAR,NFS",
+  CLOSEOUT:    "RFO_FAR,NFS",
+};
+
+const SB_URL_RAG = "https://ylzdfcyiyznazvvbqdam.supabase.co";
+const SB_KEY_RAG = "sb_publishable_adMOxPm4Sd5fcUXRf9qKdw_VpwR382c";
+
+async function fetchRAGChunks(docType) {
+  const terms = RAG_TERMS[docType] || [];
+  if (!terms.length) return [];
+  const docTypes = RAG_DOC_TYPES[docType] || "RFO_FAR,NFS,NFS_CG";
+  const headers = { "apikey": SB_KEY_RAG, "Authorization": `Bearer ${SB_KEY_RAG}` };
+  const base = `${SB_URL_RAG}/rest/v1/cpas_regulatory_docs`;
+  const typeFilter = `&doc_type=in.(${docTypes})`;
+  const chunks = new Map();
+
+  // Fetch top 2 terms in parallel
+  const topTerms = terms.slice(0, 2);
+  const fetches = topTerms.map(term => {
+    const like = `%${term.replace(/[%_]/g, "")}%`;
+    const url = `${base}?select=id,source,doc_type,section,content`
+      + `&or=(section.ilike.${encodeURIComponent(like)},keywords.ilike.${encodeURIComponent(like)})`
+      + typeFilter + `&limit=3`;
+    return fetch(url, { headers }).then(r => r.ok ? r.json() : []).catch(() => []);
+  });
+
+  const results = await Promise.all(fetches);
+  for (const rows of results) {
+    for (const r of rows) {
+      if (!chunks.has(r.id)) chunks.set(r.id, r);
+    }
+  }
+
+  const PRIORITY = { RFO_FAR: 6, NFS: 5, NFS_CG: 4, PIC: 3, PN: 3, PCD: 2 };
+  return [...chunks.values()]
+    .sort((a, b) => (PRIORITY[b.doc_type]||0) - (PRIORITY[a.doc_type]||0))
+    .slice(0, 5);
+}
+
 async function callAI(prompt, systemPrompt, docType) {
   try {
-    // Route through RAG function — KB-grounded generation, API key server-side
-    const res = await fetch("/.netlify/functions/generate-rag", {
+    // Step 1 — fetch KB chunks client-side (fast, direct Supabase)
+    let regContext = "";
+    if (docType) {
+      const chunks = await fetchRAGChunks(docType);
+      if (chunks.length) {
+        const sections = chunks.map(c => {
+          const ref = [c.doc_type, c.source, c.section].filter(Boolean).join(" › ");
+          return `[${ref}]
+${(c.content||"").substring(0, 400)}`;
+        });
+        regContext = `
+
+═══ CURRENT REGULATORY TEXT (NASA KB — base all citations on this) ═══
+${sections.join("
+---
+")}
+═══════════════════════════════════════════════════════════════
+Use only the section numbers and thresholds shown above. KB text overrides training knowledge.
+`;
+        console.log("CPAS RAG sources:", chunks.map(c => `${c.doc_type}: ${c.source}`).join(", "));
+      }
+    }
+
+    // Step 2 — call claude.cjs with augmented prompt
+    const augmented = prompt + regContext;
+    const res = await fetch("/.netlify/functions/claude", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, systemPrompt, docType })
+      body: JSON.stringify({ prompt: augmented, systemPrompt })
     });
-    if (!res.ok) {
-      // Fallback to claude.cjs proxy if RAG fails
-      const fallback = await fetch("/.netlify/functions/claude", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, systemPrompt })
-      });
-      const fd = await fallback.json();
-      return fd.text || fd.error || "Generation failed.";
-    }
     const data = await res.json();
     if (data.error) return "Error: " + data.error;
-    // Optionally show sources used — stored for transparency
-    if (data.sources_used?.length) {
-      console.log("CPAS RAG sources:", data.sources_used.join(", "));
-    }
-    return data.text || "Generation failed.";
+    return data.text || data.content?.[0]?.text || "Generation failed.";
   } catch(e) { return "Error: " + e.message; }
 }
 
