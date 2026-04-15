@@ -413,59 +413,58 @@ exports.handler = async (event) => {
     const targetId = subFolderId || folderId;
     const allFiles = await walkFolder(targetId, token, "");
 
-    // Process each file — with time budget to avoid timeout
-    const START_TIME = Date.now();
-    const TIME_LIMIT_MS = 45000; // stop at 45s to leave buffer before 60s timeout
+    // Process files in parallel batches of 8 — much faster than sequential
+    const PARALLEL = 8;
+    const clearOnFirst = clearFirst && !subFolderId;
 
     let totalChunks = 0;
     let processed = 0;
     let skipped = 0;
     let errors = [];
-    let batch = [];
-    const clearOnFirst = clearFirst && !subFolderId;
-    let firstBatch = true;
+    let allChunks = [];
+    let firstInsert = true;
 
-    for (const file of allFiles) {
-      // Stop if approaching timeout
-      if (Date.now() - START_TIME > TIME_LIMIT_MS) {
-        errors.push("Time limit reached — some files skipped. Re-run seed to pick up remaining files.");
-        break;
-      }
-      if (file.name.startsWith(".") || file.name.startsWith("~$")) {
-        skipped++; continue;
-      }
+    // Filter out system files upfront
+    const validFiles = allFiles.filter(f =>
+      !f.name.startsWith(".") && !f.name.startsWith("~$")
+    );
 
-      const text = await extractText(file, token);
-      if (!text || text.trim().length < 50) {
-        skipped++; continue;
-      }
+    // Process in parallel batches
+    for (let i = 0; i < validFiles.length; i += PARALLEL) {
+      const batch = validFiles.slice(i, i + PARALLEL);
 
-      const { doc_type, source } = classifyFile(file.name, file.folderPath);
-      const chunks = chunkText(text, source, doc_type, file.name);
-      batch.push(...chunks);
-      processed++;
+      // Fetch all files in this batch simultaneously
+      const results = await Promise.allSettled(
+        batch.map(async (file) => {
+          const text = await extractText(file, token);
+          if (!text || text.trim().length < 50) return null;
+          const { doc_type, source } = classifyFile(file.name, file.folderPath);
+          return chunkText(text, source, doc_type, file.name);
+        })
+      );
 
-      if (batch.length >= BATCH_SIZE) {
-        try {
-          await insertBatch(batch, clearOnFirst && firstBatch);
-          totalChunks += batch.length;
-          firstBatch = false;
-          batch = [];
-          // Small delay to avoid rate limiting
-          await new Promise(r => setTimeout(r, 200));
-        } catch(e) {
-          errors.push(e.message);
-          batch = [];
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          allChunks.push(...result.value);
+          processed++;
+        } else {
+          skipped++;
         }
       }
-    }
 
-    if (batch.length > 0) {
-      try {
-        await insertBatch(batch, clearOnFirst && firstBatch);
-        totalChunks += batch.length;
-      } catch(e) {
-        errors.push(e.message);
+      // Insert accumulated chunks every 100 or at end
+      if (allChunks.length >= 100 || i + PARALLEL >= validFiles.length) {
+        if (allChunks.length > 0) {
+          try {
+            await insertBatch(allChunks, clearOnFirst && firstInsert);
+            totalChunks += allChunks.length;
+            firstInsert = false;
+            allChunks = [];
+          } catch(e) {
+            errors.push(e.message.substring(0, 200));
+            allChunks = [];
+          }
+        }
       }
     }
 
