@@ -227,7 +227,7 @@ function buildRoadmap(intake) {
 
 // RAG query terms by document type
 const RAG_TERMS = {
-  JOFOC:       ["6.103", "sole source", "other than full and open", "1806.3"],
+  JOFOC:       ["Competition Requirements", "other than full and open", "1806", "sole source"],
   ACQ_PLAN:    ["1807.14", "procurement strategy", "PSM"],
   PNM:         ["15.406-3", "price negotiation", "price reasonableness"],
   ANOSCA:      ["1805.302", "ANOSCA", "public announcement", "PCD 25-16"],
@@ -303,7 +303,7 @@ async function callAI(prompt, systemPrompt, docType) {
         const sections = chunks.map(c => {
           const ref = [c.doc_type, c.source, c.section].filter(Boolean).join(" › ");
           return `[${ref}]
-${(c.content||"").substring(0, 400)}`;
+${(c.content||"").substring(0, 300)}`;
         });
         regContext = "\n\n=== CURRENT REGULATORY TEXT (NASA KB) ===\n" + sections.join("\n---\n") + "\n=== END REGULATORY CONTEXT ===\nBase all FAR/NFS citations on the text above. KB content overrides training knowledge.\n";
         console.log("CPAS RAG sources:", chunks.map(c => `${c.doc_type}: ${c.source}`).join(", "));
