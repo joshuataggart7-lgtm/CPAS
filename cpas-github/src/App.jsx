@@ -305,15 +305,7 @@ async function callAI(prompt, systemPrompt, docType) {
           return `[${ref}]
 ${(c.content||"").substring(0, 400)}`;
         });
-        regContext = `
-
-═══ CURRENT REGULATORY TEXT (NASA KB — base all citations on this) ═══
-${sections.join("
----
-")}
-═══════════════════════════════════════════════════════════════
-Use only the section numbers and thresholds shown above. KB text overrides training knowledge.
-`;
+        regContext = "\n\n=== CURRENT REGULATORY TEXT (NASA KB) ===\n" + sections.join("\n---\n") + "\n=== END REGULATORY CONTEXT ===\nBase all FAR/NFS citations on the text above. KB content overrides training knowledge.\n";
         console.log("CPAS RAG sources:", chunks.map(c => `${c.doc_type}: ${c.source}`).join(", "));
       }
     }
