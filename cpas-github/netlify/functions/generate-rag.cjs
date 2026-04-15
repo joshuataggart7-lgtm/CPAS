@@ -47,31 +47,32 @@ const DOC_PRIORITY_TYPES = {
   CLOSEOUT:    "RFO_FAR,NFS",
 };
 
-async function fetchKBChunks(terms, docTypes, limit = 8) {
+async function fetchKBChunks(terms, docTypes, limit = 5) {
   const headers = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` };
   const base = `${SB_URL}/rest/v1/cpas_regulatory_docs`;
   const typeFilter = docTypes ? `&doc_type=in.(${docTypes})` : "";
   const chunks = new Map();
 
-  for (const term of terms.slice(0, 4)) {
+  // Use top 2 most specific terms only, fetch in parallel
+  const topTerms = terms.slice(0, 2);
+  const fetches = topTerms.map(term => {
     const like = `%${term.replace(/[%_]/g, "")}%`;
     const url = `${base}?select=id,source,doc_type,section,title,content`
-      + `&or=(section.ilike.${encodeURIComponent(like)},keywords.ilike.${encodeURIComponent(like)},content.ilike.${encodeURIComponent(like)})`
+      + `&or=(section.ilike.${encodeURIComponent(like)},keywords.ilike.${encodeURIComponent(like)})`
       + typeFilter
-      + `&limit=${Math.ceil(limit / terms.slice(0,4).length) + 2}`;
+      + `&limit=4`;
+    return fetch(url, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => []);
+  });
 
-    try {
-      const res = await fetch(url, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        for (const r of data) {
-          if (!chunks.has(r.id)) chunks.set(r.id, r);
-        }
-      }
-    } catch(e) { /* continue */ }
+  const results = await Promise.all(fetches);
+  for (const rows of results) {
+    for (const r of rows) {
+      if (!chunks.has(r.id)) chunks.set(r.id, r);
+    }
   }
 
-  // Sort by doc type priority and return top N
   const PRIORITY = { RFO_FAR: 6, NFS: 5, NFS_CG: 4, PIC: 3, PN: 3, PCD: 2 };
   return [...chunks.values()]
     .sort((a, b) => (PRIORITY[b.doc_type] || 0) - (PRIORITY[a.doc_type] || 0))
