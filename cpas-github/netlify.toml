@@ -44,3 +44,9 @@
   for = "/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
+
+[functions."generate-rag-background"]
+  type = "background"
+
+[functions."job-status"]
+  timeout = 10
