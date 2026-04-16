@@ -39,7 +39,7 @@ const ALL_ITEMS = [
   { id:"c32",  phase:"P2", text:"Competition strategy decision documented with FAR/RFO FAR basis", citation:"RFO FAR 6.1; FAR 6.101", app:"All actions above SAT" },
   { id:"c33",  phase:"P2", text:"JOFOC/J&A contains all 11 required elements per RFO FAR 6.104-1", citation:"RFO FAR 6.104-1; FAR 6.303-2; PCD 25-10", app:"Sole source above SAT", trigger:"solesource" },
   { id:"c34",  phase:"P2", text:"JOFOC approved at correct dollar-threshold authority level", citation:"RFO FAR 6.104-2; NFS 1806.304", app:"All JOFOC actions", trigger:"solesource" },
-  { id:"c35",  phase:"P2", text:"Redacted JOFOC posted to SAM.gov within required timeframe", citation:"FAR 6.305", app:"JOFOC actions above SAT", trigger:"solesource" },
+  { id:"c35",  phase:"P2", text:"Redacted JOFOC posted to SAM.gov within 14 days after award (RFO eliminated pre-award posting requirement)", citation:"RFO FAR 6.301; RFO FAR 6.104-1", app:"JOFOC actions above SAT", trigger:"solesource" },
   { id:"c37",  phase:"P2", text:"HQ Procurement Analyst input obtained on acquisition strategy (required for ≥$50M)", citation:"NFS CG 1807.12(b)", app:"Actions ≥$50M", trigger:"value>=50000000" },
   { id:"c38",  phase:"P2", text:"Appropriate authority approvals per center delegation matrix", citation:"NFS CG 1801; NASA MDA 5013.01", app:"All actions per authority matrix" },
   { id:"c39",  phase:"P2", text:"NF 1787 Small Business Coordination Package submitted to OSBP Small Business Specialist", citation:"NFS CG 1819.11", app:"Acquisitions >$2M not set aside for small business", trigger:"value>2000000" },
