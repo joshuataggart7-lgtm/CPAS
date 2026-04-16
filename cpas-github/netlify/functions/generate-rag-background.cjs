@@ -146,3 +146,41 @@ exports.handler = async (event) => {
   // Netlify background functions ignore return value — client polls for result
   return { statusCode: 202, headers: cors, body: "" };
 };
+." : "");
+
+    // Call Claude
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 6000,
+        system: sysPrompt,
+        messages: [{ role: "user", content: prompt + regContext }],
+      }),
+    });
+
+    const data = await res.json();
+    if (data.error) {
+      await writeJob(jobId, { status: "error", error_msg: data.error.message });
+      return { statusCode: 202, headers: cors, body: "" };
+    }
+
+    const text = data.content?.[0]?.text || "Generation failed.";
+    await writeJob(jobId, {
+      status: "done",
+      result_text: text,
+      sources_used: JSON.stringify(sources),
+      chunks_used: chunks.length,
+    });
+
+  } catch (err) {
+    try { await writeJob(jobId || "unknown", { status: "error", error_msg: err.message }); } catch(e) {}
+  }
+
+  return { statusCode: 202, headers: cors, body: "" };
+};
