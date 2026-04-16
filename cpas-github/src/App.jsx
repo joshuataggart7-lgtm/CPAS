@@ -273,8 +273,13 @@ async function callAI(prompt, systemPrompt, docType, onStatus) {
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
 
       const pollRes = await fetch(`/.netlify/functions/job-status?id=${jobId}`);
-      if (!pollRes.ok) continue;
-      const job = await pollRes.json();
+      if (!pollRes.ok) { 
+        // 500 during startup is normal — Blobs may not have the key yet
+        await new Promise(r => setTimeout(r, 2000));
+        continue; 
+      }
+      let job;
+      try { job = await pollRes.json(); } catch(e) { continue; }
 
       // Update status message
       if (onStatus && RAG_STATUS_MSGS[job.status]) {
