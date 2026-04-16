@@ -719,6 +719,7 @@ import ComplianceTools from "./ComplianceTools.jsx";
 import PreSolTools from "./PreSolTools.jsx";
 import RequestorPortal from "./RequestorPortal.jsx";
 import TechEvalHelper from "./TechEvalHelper.jsx";
+import AstroAssistant, { resolveAstroContext } from "./AstroAssistant.jsx";
 
 // * SET THIS to your deployed API URL (see DEPLOY.md)
 // Local dev:  "http://localhost:8080"
@@ -5593,6 +5594,14 @@ function CPAS() {
         </div>
       </div>
     )}
+    <AstroAssistant context={resolveAstroContext({
+      screen,
+      showClauseMatrix,
+      showAttachments,
+      showRegSearch,
+      showTechEval,
+      activeStep,
+    })} />
     </>
   );
 }
