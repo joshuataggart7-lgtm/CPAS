@@ -751,15 +751,16 @@ function buildBPACallText(bpa) {
 // ANOSCA AUTO-TRIGGER LOGIC
 // ═══════════════════════════════════════════════════════════════════
 
-// NFS 1805.303 — ANOSCA thresholds
-// PCD 25-16 (Sept 7, 2025) — NFS 1805 RFO Deviation — current thresholds
-// $7M+ = HQ Public Announcement required
-// $30M+ = ANOSCA + HQ Public Announcement required
-// Submission term: "NASA Notification of Contract Action"
+// ANOSCA / NPA thresholds — Authority: NFS 1805.302 + NFS CG 1805.32
+// NFS Part 1806 is RESERVED; old NFS 1805.303 numbering is superseded.
+// NFS 1805.302: $7M+ = NASA HQ public announcement required
+// NFS CG 1805.32: $7M–$30M = NPA template (ANOSCA/public announcement/pre-award/award notices)
+//                $30M+ = ANOSCA application
+// Submission form: "NASA Notification of Contract Action" (NPA)
 const ANOSCA_THRESHOLDS = {
-  hqAnnouncement:      7000000,   // NFS 1805.303-71(a) — HQ public announcement $7M+
-  anosca:              30000000,  // NFS 1805.303-71(b) — ANOSCA + HQ announcement $30M+
-  optionExercise:      30000000,  // NFS 1805.303-71(a)(2) — option exercise $30M+
+  hqAnnouncement:      7000000,   // NFS 1805.302 — HQ public announcement $7M+
+  anosca:              30000000,  // NFS CG 1805.32 — ANOSCA application $30M+
+  optionExercise:      30000000,  // NFS CG 1805.32 — option exercise $30M+
   // Legacy fields kept for backward compatibility
   competitiveAward:    7000000,
   soleSource:          7000000,
@@ -796,8 +797,13 @@ export function checkANOSCARequired(intake, modData = null) {
     }
   }
 
+  const level = (reasons.length > 0 && v >= ANOSCA_THRESHOLDS.anosca)
+    ? "ANOSCA"
+    : (reasons.length > 0 ? "HQ_ANNOUNCEMENT" : "NONE");
+
   return {
     required: reasons.length > 0,
+    level,   // "HQ_ANNOUNCEMENT" ($7M–$30M) | "ANOSCA" ($30M+) | "NONE"
     reasons,
     threshold: isSole ? ANOSCA_THRESHOLDS.soleSource : ANOSCA_THRESHOLDS.competitiveAward,
   };
@@ -814,13 +820,15 @@ export function ANOSCABadge({ intake }) {
       fontFamily: FONT_AT,
     }}>
       <div style={{ fontSize: 11, color: "#7a4a00", fontWeight: "600", marginBottom: 4 }}>
-        ⚠ {check.level === "ANOSCA" ? "ANOSCA + HQ Public Announcement" : "NASA HQ Public Announcement"} Required — NFS 1805.303-71 / PIC 26-01
+        ⚠ {check.level === "ANOSCA" ? "ANOSCA Application Required ($30M+)" : "NASA HQ Public Announcement Required ($7M–$30M)"} — NFS 1805.302 / NFS CG 1805.32 / PIC 26-01
       </div>
       {check.reasons.map((r, i) => (
         <div key={i} style={{ fontSize: 11, color: "#7a4a00" }}>• {r}</div>
       ))}
       <div style={{ fontSize: 10, color: "#8896b0", marginTop: 4 }}>
-        Submit NASA Notification of Contract Action (NPA) template via PowerApp to HQ Procurement Analyst before award. See ANOSCA step in roadmap. Authority: NFS 1805.303-72 / PIC 26-01.
+        {check.level === "ANOSCA"
+          ? "Submit ANOSCA application for actions $30M or greater. Authority: NFS CG 1805.32 / PIC 26-01."
+          : "Complete NPA template for HQ public announcement ($7M–$30M). Authority: NFS 1805.302 / NFS CG 1805.32 / PIC 26-01."}
       </div>
     </div>
   );

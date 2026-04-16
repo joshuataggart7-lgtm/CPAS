@@ -282,7 +282,7 @@ export default function RegulatorySearch({ onClose }) {
               <input style={inp} value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && doSearch(query)}
-                placeholder="Search clause numbers, section citations, topics... e.g. 1805.303, sole source, SBIR data rights" />
+                placeholder="Search clause numbers, section citations, topics... e.g. 1805.302, 6.104, sole source, SBIR data rights" />
             </div>
             <select value={filterType} onChange={e => setFilterType(e.target.value)}
               style={{ ...inp, width:120 }}>
@@ -309,7 +309,7 @@ export default function RegulatorySearch({ onClose }) {
 
           {/* Quick search chips */}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
-            {["1805.303-71","1806.304","1812.301","1827.409","1842.270","52.219-9","1852.216-80","PCD 25-16","PCD 26-02","sole source","JOFOC","subcontracting plan","QASP","price negotiation","source selection","data rights","SBIR"].map(q => (
+            {["1805.302","1805.32","6.301","6.104","1812.301","1827.409","1842.270","52.219-9","1852.216-80","PCD 25-16","PCD 26-02","sole source","JOFOC","subcontracting plan","QASP","price negotiation","source selection","data rights","SBIR"].map(q => (
               <button key={q} onClick={() => { setQuery(q); doSearch(q); }}
                 style={{ padding:"3px 10px", borderRadius:20, fontSize:10, cursor:"pointer",
                   background:C.bg3, border:`1px solid ${C.border}`, color:C.muted,
@@ -391,7 +391,7 @@ export default function RegulatorySearch({ onClose }) {
               <div style={{ fontSize:24, marginBottom:8 }}>🔍</div>
               <div style={{ fontSize:13 }}>Search the regulatory knowledge base above.</div>
               <div style={{ fontSize:11, marginTop:4 }}>
-                Try clause numbers (1852.215-84), section citations (1805.303), or topic keywords.
+                Try clause numbers (1852.215-84), section citations (1805.302), or topic keywords.
               </div>
             </div>
           )}

@@ -321,7 +321,7 @@ const CLOSEOUT_ITEMS = [
   // Contractor performance
   { id: "cpars",          phase: "PERFORMANCE",   label: "CPARS evaluation submitted (all contracts meeting CPARS thresholds)", farRef: "FAR 42.1502", required: true },
   { id: "subcontract_perf",phase:"PERFORMANCE",   label: "Subcontractor performance evaluations submitted (if applicable)", farRef: "FAR 42.1502", required: false },
-  { id: "key_personnel",  phase: "PERFORMANCE",   label: "COR letter revoked/closed out with copy filed", farRef: "NFS 1801.602-2", required: true },
+  { id: "key_personnel",  phase: "PERFORMANCE",   label: "NF 1634 COR Delegation revoked/closed out with copy filed", farRef: "NFS 1801.404 / NFS CG 1801.4", required: true },
 
   // File documentation
   { id: "fpds",           phase: "FILING",        label: "FPDS-NG Contract Action Report updated for closeout", farRef: "FAR 4.604", required: true },
@@ -492,7 +492,7 @@ const DF_TYPES = [
   { id: "NONCOMMERCIAL",label: "Other Than Commercial Items", farRef: "FAR 11.703",       color: C.purple  },
   { id: "BUNDLING",     label: "Contract Bundling",           farRef: "FAR 7.107-2",      color: C.red     },
   { id: "CONSOLIDATION",label: "Consolidation of Requirements",farRef:"FAR 7.107-4",      color: "#a32d2d" },
-  { id: "URGENCY",      label: "Unusual Urgency (Other than Full & Open)", farRef: "FAR 6.302-2", color: C.green },
+  { id: "URGENCY",      label: "Unusual Urgency (Other than Full & Open)", farRef: "RFO FAR 6.103-2", color: C.green },
 ];
 
 export function DFTemplates({ intake, onGenerated }) {
@@ -583,9 +583,9 @@ export function DFTemplates({ intake, onGenerated }) {
       </>);
 
       case "URGENCY": return (<>
-        {secHead("UNUSUAL URGENCY — FAR 6.302-2", C.green)}
+        {secHead("UNUSUAL URGENCY — RFO FAR 6.103-2", C.green)}
         <div style={{ background: "#e8f7f0", border: "1px solid #1a4a2a", borderRadius: 4, padding: "8px 10px", marginBottom: 8, fontSize: 10, color: "#0f6e56" }}>
-          FAR 6.302-2: Unusual and compelling urgency — delay would seriously injure the Government. Must compete to extent practicable.
+          RFO FAR 6.103-2: Unusual and compelling urgency — delay would seriously injure the Government. Must compete to the extent practicable.
         </div>
         {lbl("Facts Supporting Urgency", true)}
         <textarea style={ta} rows={4} value={fields.urgencyFacts} onChange={e => set("urgencyFacts", e.target.value)}
@@ -705,7 +705,7 @@ function buildDFText(type, f, intake) {
         `${"─".repeat(70)}\n\n${"_".repeat(40)}\n${f.coName || "[CO]"}\nContracting Officer\nDate: ${fmt(f.coDate)}\n`;
 
     case "URGENCY":
-      return header("UNUSUAL AND COMPELLING URGENCY", "FAR 6.302-2(b)") +
+      return header("UNUSUAL AND COMPELLING URGENCY", "RFO FAR 6.103-2") +
         `AUTHORITY: 10 U.S.C. 3204(a)(2) / 41 U.S.C. 3304(a)(2)\n\n` +
         `FINDINGS\n\n` +
         `1.  The following facts and circumstances create an unusual and compelling urgency:\n\n${f.urgencyFacts || "[URGENCY FACTS]"}\n\n` +
@@ -716,7 +716,7 @@ function buildDFText(type, f, intake) {
         `4.  The Government will solicit offers from as many potential sources as is practicable.\n\n` +
         `DETERMINATION\n\nBased on the above findings, I determine that compelling and unusual urgency ` +
         `exists for this acquisition and that the Government would be seriously injured if competition ` +
-        `were required per FAR 6.302-2.\n\n` +
+        `were required per RFO FAR 6.103-2.\n\n` +
         `${"─".repeat(70)}\n\n${"_".repeat(40)}\n${f.coName || "[CO]"}\nContracting Officer\nDate: ${fmt(f.coDate)}\n`;
 
     default: return "";

@@ -20,7 +20,7 @@ const PHASES = [
 // Full checklist — each item has: id, phase, text, citation, applicability, note
 const ALL_ITEMS = [
   // P1 — Package Preparation
-  { id:"c11",  phase:"P1", text:"Approved purchase requisition in NCMS/SAP", citation:"NFS 1804.7301(a); PCD 25-21", app:"All actions obligating funding" },
+  { id:"c11",  phase:"P1", text:"Approved purchase requisition in NCMS/SAP", citation:"NFS CG 1804.11 / PCD 25-21 — NFS Part 1804 Reserved; NCMS requirement in NFS CG", app:"All actions obligating funding" },
   { id:"c12",  phase:"P1", text:"Requisition includes complete SOW/PWS or SOO", citation:"FAR 11.101; NFS CG 1811", app:"All actions" },
   { id:"c14",  phase:"P1", text:"Approved SOW/PWS attached and technically adequate", citation:"FAR 11.101", app:"All actions" },
   { id:"c15",  phase:"P1", text:"QASP or written determination that QASP is not required", citation:"NFS 1846.408; FAR 46.4", app:"All new contracts for services" },
@@ -29,7 +29,7 @@ const ALL_ITEMS = [
   { id:"c21",  phase:"P1", text:"Funds availability certification signed by authorized official", citation:"FAR 32.702", app:"All actions obligating funding" },
   { id:"c22",  phase:"P1", text:"Inherently governmental function determination documented", citation:"FAR 7.503; NFS CG 1807.51", app:"All new contracts for services" },
   { id:"c23",  phase:"P1", text:"COR nomination package submitted using NF 1634 (Recommendation for Appointment of COR template)", citation:"NFS CG 1801.42; NFS CG Appendix A", app:"All contracts requiring a COR" },
-  { id:"c24",  phase:"P1", text:"NF 1707 Special Approvals and Affirmations completed and uploaded to NCMS", citation:"NFS 1804.7301; NFS CG 1804", app:"All new contract actions per PCD 25-21" },
+  { id:"c24",  phase:"P1", text:"NF 1707 Special Approvals and Affirmations completed and uploaded to NCMS", citation:"NFS CG 1804.11 / PCD 25-21", app:"All new contract actions per PCD 25-21" },
   { id:"c25",  phase:"P1", text:"OCIO Authorization obtained (CITR or ORCA) and documented in NF 1707", citation:"NFS CG 1839.11; NFS CG 1839.12; NFS CG 1839.13", app:"All acquisitions regardless of NAICS code or dollar value" },
   { id:"c26",  phase:"P1", text:"D&F for use of other than commercial items documented (if applicable)", citation:"FAR 12.101; NFS 1812.101", app:"Non-commercial above SAT", trigger:"noncommercial" },
 
@@ -93,7 +93,7 @@ const ALL_ITEMS = [
   { id:"c172", phase:"P7", text:"FPDS-NG Contract Action Report submitted within 3 business days after award", citation:"FAR 4.301(f)(2)(ii)", app:"All actions" },
   { id:"c173", phase:"P7", text:"NASA Notification of Procurement Action (NPA) submitted to HQ (actions ≥$7M)", citation:"NFS 1805.302; NFS CG 1805.32; PIC 26-01", app:"Actions ≥$7M", trigger:"value>=7000000" },
   { id:"c174", phase:"P7", text:"NEAR filing complete with all required file elements", citation:"NFS CG 1804.13; PCD 25-21", app:"All actions" },
-  { id:"c179", phase:"P7", text:"Contract Action Report (CAR) approved within 3 business days and uploaded", citation:"NFS 1804.7301; PCD 25-21", app:"All actions" },
+  { id:"c179", phase:"P7", text:"Contract Action Report (CAR) approved within 3 business days and uploaded", citation:"NFS CG 1804.31 / PCD 25-21", app:"All actions" },
   { id:"c185", phase:"P7", text:"SAM.gov award notice posted per FAR 5.301 (>$25K if WTO GPA/FTA or likely subcontracting)", citation:"FAR 5.301; FAR 5.302", app:"Contract actions meeting FAR 5.301 threshold" },
   { id:"c186", phase:"P7", text:"NF 1634 COR Delegation signed, filed, and copies distributed to COR, contractor, and contract admin office", citation:"NFS CG 1801.42(h); NFS CG Appendix A", app:"All contracts requiring a COR" },
   { id:"c187", phase:"P7", text:"Postaward conference held and Postaward Conference Report completed (required for contracts >$10M; good practice for all)", citation:"NFS CG 1842.32; NFS CG Appendix A", app:"Required: contracts >$10M, or at/near NASA installation, or complex management. Recommended: all new contracts" },

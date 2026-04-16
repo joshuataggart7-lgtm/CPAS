@@ -210,7 +210,7 @@ function buildSectionL(p) {
   let text = "SECTION L — INSTRUCTIONS, CONDITIONS, AND NOTICES TO OFFERORS\n\n";
 
   if (soleSource) {
-    text += `NOTE: This is a sole source acquisition. Sections L and M (competitive proposal instructions and evaluation factors) are not applicable. The Government will negotiate directly with the intended contractor in accordance with FAR ${p.competitionStrategy?.includes("8") ? "6.302-5 / 19.811" : "6.302-1"}.\n\n`;
+    text += `NOTE: This is a sole source acquisition. Sections L and M (competitive proposal instructions and evaluation factors) are not applicable. The Government will negotiate directly with the intended contractor in accordance with RFO FAR ${p.competitionStrategy?.includes("8") ? "6.103-5 / 19.811" : "6.103-1"} [formerly FAR ${p.competitionStrategy?.includes("8") ? "6.302-5" : "6.302-1"}].\n\n`;
     text += `L.1 REQUEST FOR PROPOSAL / QUOTE\nThe Government requests the following information from the prospective contractor:\n\n`;
     text += `    (1) Technical approach and capability statement\n`;
     text += `    (2) Price/cost proposal with supporting rationale\n`;
@@ -245,7 +245,7 @@ function buildSectionM(p) {
 
   if (soleSource) {
     text += `NOTE: This is a sole source acquisition. Competitive evaluation factors are not applicable.\n\n`;
-    text += `M.1 BASIS FOR AWARD\nThis contract will be awarded to [CONTRACTOR NAME] on a sole source basis under FAR ${p.competitionStrategy?.includes("8") ? "6.302-5 (authorized or required by statute — 8(a))" : "6.302-1 (only one responsible source)"} following determination of fair and reasonable pricing through negotiation in accordance with FAR Part 15.\n\n`;
+    text += `M.1 BASIS FOR AWARD\nThis contract will be awarded to [CONTRACTOR NAME] on a sole source basis under RFO FAR ${p.competitionStrategy?.includes("8") ? "6.103-5 [formerly FAR 6.302-5] (authorized or required by statute — 8(a))" : "6.103-1 [formerly FAR 6.302-1] (only one responsible source)"} following determination of fair and reasonable pricing through negotiation in accordance with FAR Part 15.\n\n`;
     text += `M.2 PRICE REASONABLENESS\nThe Contracting Officer will determine price reasonableness through ${
       p.isCommercial === "YES"
         ? "price analysis per FAR 15.404-1 (commercial items are exempt from TINA per FAR 15.403-1(b)(3) regardless of value)"

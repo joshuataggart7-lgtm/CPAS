@@ -15,7 +15,7 @@ const TIPS = {
   ],
   ROADMAP: [
     { id:"road-1", text:"Each roadmap step includes a FAR/NFS citation. The roadmap is advisory — your CO judgment governs. Steps can be completed out of order when your acquisition warrants it." },
-    { id:"road-2", text:"ANOSCA applies to actions $30M and above, including pre-award activities (synopses, draft RFPs) that would commit the Government to a $30M+ action. PIC 26-01 has the full scope." },
+    { id:"road-2", text:"Two separate HQ notification requirements: $7M or above requires HQ public announcement via NPA template (NFS 1805.302 / NFS CG 1805.32). $30M or above requires the ANOSCA application. They are not the same process — both thresholds must be tracked independently." },
     { id:"road-3", text:"Worth confirming: the PSM approval level at your estimated value. NFS CG 1807.11 governs thresholds — confirm your center's actual delegation before routing." },
     { id:"road-4", text:"Holding orbit while you work through the phases. Click any step to expand it and access document generation, checklists, and citations." },
   ],

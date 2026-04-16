@@ -25,7 +25,7 @@ function buildRoadmap(intake) {
       { id:"P1S5", title:"Funds Availability Certification", type:"CHECK", nfs:"NFS CG 1807.71(c) / FAR 32.702 — CO must not issue solicitations until approved funds certification received" },
       ...(reqType === "SERVICES" ? [{ id:"P1S6", title:"Inherently Governmental Determination", type:"CHECK", nfs:"FAR 7.503 / NFS CG 1807.51 — determination must be provided by Center requirements office" }] : []),
       ...(reqType === "IT" ? [{ id:"P1S7", title:"OCIO IT Authorization (all IT acquisitions — no IT without OCIO auth)", type:"CHECK", nfs:"NFS 1807.7000 / PN 24-09 / PCD 25-09 — required for ALL IT acquisitions regardless of vehicle, NAICS, or dollar value" }] : []),
-      { id:"P1S8", title:"COR Nomination", type:"CHECK", nfs:"NFS 1801.602-2 / NFS CG 1801.42" },
+      { id:"P1S8", title:"COR Nomination", type:"CHECK", nfs:"NFS 1801.404 / NFS CG 1801.4 — use NF 1634 for appointment; FAC-COR certification required" },
     ]
   });
 
@@ -103,7 +103,7 @@ function buildRoadmap(intake) {
         decisionOptions:[
           { label:"Full and Open Competition", sub:"FAR 6.1 - All responsible sources may submit." },
           { label:"Total Small Business Set-Aside", sub:"FAR 19.502-2 - Reasonable expectation of 2+ small business offers at fair market price." },
-          { label:"Sole Source J&A", sub:"FAR 6.302 - One of 7 statutory exceptions required." },
+          { label:"Sole Source J&A", sub:"RFO FAR 6.103 — one of 7 statutory authorities required; document per RFO FAR 6.104-1." },
           { label:"Order off Existing Vehicle", sub:"FAR 8/16 - Pre-competed vehicle (GWAC, IDIQ) used." },
         ] },
     ];
@@ -683,7 +683,7 @@ async function generateDoc(docType, intake, roadmap, onStatus) {
     SECTION_M:"Write Section M - Evaluation Factors for: \""+(t)+"\", "+(c)+", "+(v)+".",
     PNM:"Write a NASA Price Negotiation Memorandum (PNM) per FAR 15.406-3 for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+". Structure: HEADER (contract no., contractor, date, CO name); 1.INTRODUCTION (purpose, action type, certified cost data required Y/N, contractor systems status); 2.NEGOTIATION SUMMARY TABLE (columns: Element|Gov Objective|Contractor Proposal|Maximum Gov Position|Negotiated - rows for Labor/ODCs/Travel/G&A/Fee/TOTAL); 3.KEY NEGOTIATION HIGHLIGHTS (a.Labor hours/rates basis b.ODCs rationale c.G&A/OH rates source d.Fee/profit weighted guidelines); 4.PRICE REASONABLENESS DETERMINATION; 5.NEGOTIATION NARRATIVE. End with CO signature block. File references: NEAR FE 82 (PNM), FE 81 (PPM/NF634), FE 83 (Certified Cost Data if applicable).",
     RESPONSIBILITY:"Write an Affirmative Responsibility Determination per FAR 9.105-2 for: \""+(t)+"\", "+(c)+".",
-    COR_LETTER:"Write a NASA COR Appointment Letter per NFS 1801.602-2 for: \""+(t)+"\", "+(c)+". Structure: NASA MEMORANDUM header; TO/FROM/SUBJECT block; 1.APPOINTMENT (effective dates); 2.SCOPE OF AUTHORITY (what COR may do: monitor performance, accept/reject deliverables, approve travel/overtime per contract, review invoices, maintain COR file, prepare CPARS); 3.LIMITATIONS (what COR may NOT do: direct contract changes, authorize out-of-scope work, make commitments, grant deviations); 4.REQUIRED QUALIFICATIONS (FAC-COR level I/II/III, NASA COR training per NPR 5101.10, COI certification); 5.REPORTING REQUIREMENTS; 6.ACCEPTANCE BLOCK (dual signature: CO and COR with FAC-COR certification level and expiration date).",
+    COR_LETTER:"Write a NASA COR Appointment Letter per NFS 1801.404 / NFS CG 1801.4 for: \""+(t)+"\", "+(c)+". Structure: NASA MEMORANDUM header; TO/FROM/SUBJECT block; 1.APPOINTMENT (effective dates); 2.SCOPE OF AUTHORITY (what COR may do: monitor performance, accept/reject deliverables, approve travel/overtime per contract, review invoices, maintain COR file, prepare CPARS); 3.LIMITATIONS (what COR may NOT do: direct contract changes, authorize out-of-scope work, make commitments, grant deviations); 4.REQUIRED QUALIFICATIONS (FAC-COR level I/II/III, NASA COR training per NPR 5101.10, COI certification); 5.REPORTING REQUIREMENTS; 6.ACCEPTANCE BLOCK (dual signature: CO and COR with FAC-COR certification level and expiration date).",
     KICKOFF:"Write a post-award kickoff agenda and contractor notification letter for: \""+(t)+"\", "+(c)+".",
     QASP:"Write a NASA QASP per FAR 37.604 / FAR 46.4 / NFS CG 1846.41 for: \""+(t)+"\", "+(c)+". Structure: HEADER (contract title, center, COR, CO); 1.PURPOSE; 2.ROLES (CO has overall responsibility, COR is primary surveillance authority, Contractor maintains quality control); 3.PERFORMANCE REQUIREMENTS SUMMARY TABLE (columns: Performance Objective|Standard|AQL|Surveillance Method|Frequency - include rows for deliverables, responsiveness, NF 533 reports, CPARS); 4.SURVEILLANCE METHODS (100% inspection for critical items, periodic surveillance, random sampling, customer feedback, document review); 5.DOCUMENTATION (COR file requirements, 5-day documentation rule); 6.AI SURVEILLANCE (OMB M-25-22/PIC 25-03A - identify covered AI use cases if applicable); 7.PERFORMANCE RATINGS (Exceptional/Very Good/Satisfactory/Marginal/Unsatisfactory per FAR 42.1503); 8.REMEDIES (verbal counseling, written notification, Cure Notice per FAR 49.607, Show Cause, termination).",
     AWARD_DOC:"Write award document cover and key SF-1449/SF-26 blocks for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+".",
@@ -694,7 +694,9 @@ async function generateDoc(docType, intake, roadmap, onStatus) {
         CLOSEOUT:"Write a contract closeout checklist per FAR 4.804 for: \""+(t)+"\", "+(c)+", "+(v)+". Three columns: Required Action / Responsible Party / Date.",
   }
 
-  return await callAI(GENERATE_PROMPTS[docType] || "Generate a professional "+(docType)+" document for this NASA acquisition.\n"+(ctx), null, docType, onStatus);
+  const SAFETY_ADVISORY = "ADVISORY: This output is draft support only. The CO is the decision-maker and must review all generated text before use. Do not present this as final legal authority. Cite only the current RFO FAR (Mar 2026), NFS (Apr 2026), and NFS CG (Apr 2026). If referencing a superseded citation, mark it explicitly as [superseded — do not use].";
+  const basePrompt = GENERATE_PROMPTS[docType] || "Generate a professional "+(docType)+" document for this NASA acquisition.\n"+(ctx);
+  return await callAI(basePrompt + "\n\n" + SAFETY_ADVISORY, null, docType, onStatus);
 }
 
 // Applies to: Ames (ARC), Glenn (GRC), Armstrong (AFRC), Langley (LaRC)
@@ -2271,7 +2273,7 @@ const STEP_CHECKS = {
     "JOFOC approved at correct level per RFO FAR 6.104-2? — ≤$900K: CO self-certifies; >$900K-$20M: Competition Advocate approves (not delegable); >$20M-$150M: HCA approves (may delegate); >$150M: SPE approves (not delegable)",
     "SAM.gov posting timing correct? Per RFO FAR 6.301: post redacted JOFOC within 14 days AFTER award (not before — the old FAR 6.305(b) pre-award posting requirement was removed by the RFO). Minimum 30-day public availability. Post at SAM.gov and agency website.",
     "Redaction plan documented — sensitive data removed before public posting?",
-    "For actions >$750K: 15-day public comment period expires before award date?"
+    "JOFOC public availability confirmed? Per RFO FAR 6.301: post within 14 days AFTER award, available minimum 30 days. No pre-award posting or comment period required under RFO."
   ],
   P2S6: ["PSM participants documented?", "PSM minutes signed?", "PSM covers all required FAR 7.105 topics?"],
   P7S4: ["FPDS within 3 business days of award?", "Correct contract action code?", "DUNS/UEI and NAICS correct in FPDS?"],
@@ -2295,8 +2297,8 @@ const CHECKLIST = {
     {id:21,  q:"Funds availability certification signed by authorized official?",    app:"All actions obligating funding"},
     {id:22,  q:"Inherently governmental function determination documented?",         app:"All new contracts for services"},
     {id:23,  q:"COR nomination package submitted (NF 1801 or equivalent)?",         app:"All service contracts"},
-    {id:24,  q:"NF 1707 Special Approvals and Affirmations completed (uploaded to NCMS)?",              app:"All actions per NFS 1804.7301 / PCD 25-21"},
-    {id:25,  q:"IPv6 and ELMT coordination completed (IT only)?",                    app:"IT acquisitions only"},
+    {id:24,  q:"NF 1707 Special Approvals and Affirmations completed (uploaded to NCMS)?",              app:"All actions per NFS CG 1804.11 / PCD 25-21 — NFS Part 1804 is Reserved; requirements live in NFS CG"},
+    {id:25,  q:"OCIO IT Authorization completed (NF 1835 IPv6 Compliance Procurement Waiver if applicable)?", app:"IT acquisitions only — see NFS CG 1811.2 / NF 1835"},
     {id:26,  q:"D&F for use of other than commercial items (if applicable)?",        app:"Non-commercial above SAT"},
   ],
   P2:[
@@ -2365,7 +2367,7 @@ const CHECKLIST = {
     {id:168, q:"Signed copy of award/agreement in file?",                            app:"All actions"},
     {id:171, q:"Effective Date and PoP start on or after Signature Date?",           app:"All actions except approved Advance Agreement"},
     {id:172, q:"FPDS-NG Contract Action Report submitted within 3 days?",            app:"All actions"},
-    {id:173, q:"NASA Notification of Contract Action submitted to HQ Procurement Analyst (if $7M+ per NFS 1805.303-71, PCD 25-16)?", app:"Actions $7M or greater"},
+    {id:173, q:"NASA Notification of Contract Action (NPA) or ANOSCA submitted? $7M–$30M: NPA template via NFS CG 1805.32; $30M+: ANOSCA application via NFS CG 1805.32 / PIC 26-01.", app:"Actions $7M or greater"},
     {id:179, q:"CAR approved within 3 business days and uploaded to NEAR?",          app:"All actions"},
     {id:180, q:"Award Notification Letters issued (competitive actions)?",            app:"New competitive contracts"},
     {id:185, q:"SAM.gov award synopsis posted within required timeframe?",           app:"All new contracts above FAR Part 5 threshold"},

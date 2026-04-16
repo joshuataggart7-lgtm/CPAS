@@ -188,7 +188,7 @@ function getBlocks(formId, intake, clins) {
       { id: "13", label: "Accounting and Appropriation Data", value: intake?.fundCite || "", span: 4 },
       { id: "14", label: "Ship To / Mark For",          value: intake?.center || "", span: 2 },
       { id: "15", label: "Payment Will Be Made By",     value: "NASA NSSC", span: 1 },
-      { id: "16", label: "Authority for Using Other Than Full and Open Competition", value: intake?.competitionStrategy === "SOLE_SOURCE" ? "FAR 6.302" : "", span: 2 },
+      { id: "16", label: "Authority for Using Other Than Full and Open Competition", value: intake?.competitionStrategy === "SOLE_SOURCE" ? "RFO FAR 6.103 / FAR 6.302" : "", span: 2 },
       { id: "17", label: "Table of Contents (check)",   value: "X", span: 1 },
       // Offer blocks
       { id: "18", label: "Offeror Name and Address",    value: "", span: 2 },
