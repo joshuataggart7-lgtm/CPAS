@@ -121,7 +121,8 @@ export const CLAUSE_LIBRARY = [
   {
     num: "52.206-1",
     title: "Competition Limited to Eligible 8(a) Concerns",
-    farRef: "FAR 6.305",
+    farRef: "FAR 19.108-10(d) / NFS 1819.108-70(d)",
+    note: "Old prescription FAR 6.305 is SUPERSEDED. Current: FAR 19.108-10(d). For NASA contracts use 1852.219-18 (NFS 1819.108-70(d)).",
     req: (p) => p.setAside === "8A" ? "REQUIRED" : null,
     fillIns: [],
   },
