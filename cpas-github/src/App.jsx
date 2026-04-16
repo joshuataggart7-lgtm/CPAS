@@ -226,99 +226,20 @@ function buildRoadmap(intake) {
 }
 
 // Status messages shown during generation
-const RAG_STATUS_MSGS = {
-  pending:     "Queuing document generation...",
-  fetching_kb: "Searching regulatory knowledge base (RFO FAR, NFS, PCDs)...",
-  generating:  "Generating document from current regulatory text...",
-  done:        "Complete.",
-  error:       "Error.",
-};
-
 async function callAI(prompt, systemPrompt, docType, onStatus) {
-  // For document generation — use background RAG function (no timeout, KB-grounded)
-  // For other AI calls — use claude.cjs proxy directly
-  if (!docType) {
-    try {
-      const res = await fetch("/.netlify/functions/claude", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, systemPrompt }),
-      });
-      const data = await res.json();
-      return data.text || data.content?.[0]?.text || "Generation failed.";
-    } catch(e) { return "Error: " + e.message; }
-  }
-
   try {
-    // Step 1 — generate jobId client-side (Netlify background functions return empty body)
-    const jobId = "cpas_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
-    if (onStatus) onStatus("Queuing document generation...");
-
-    // Fire background function — don't await response body, it's always empty
-    fetch("/.netlify/functions/generate-rag-background", {
+    if (onStatus) onStatus("Generating document...");
+    const res = await fetch("/.netlify/functions/claude", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId, docType, prompt, systemPrompt }),
-    }).catch(e => console.warn("Background trigger:", e.message));
-
-    // Small delay to let the background function write initial status
-    await new Promise(r => setTimeout(r, 1500));
-
-    // Step 2 — poll for result
-    const POLL_INTERVAL = 2000; // 2 seconds
-    const MAX_WAIT = 300000;    // 5 minutes max
-    const start = Date.now();
-
-    while (Date.now() - start < MAX_WAIT) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-
-      const pollRes = await fetch(`/.netlify/functions/job-status?id=${jobId}`);
-      if (!pollRes.ok) { 
-        // 500 during startup is normal — Blobs may not have the key yet
-        await new Promise(r => setTimeout(r, 2000));
-        continue; 
-      }
-      let job;
-      try { job = await pollRes.json(); } catch(e) { continue; }
-
-      // Update status message
-      if (onStatus && RAG_STATUS_MSGS[job.status]) {
-        const msg = job.status === "generating" && job.sources_used?.length
-          ? `Generating from: ${job.sources_used.slice(0,2).join(", ")}...`
-          : RAG_STATUS_MSGS[job.status];
-        onStatus(msg);
-      }
-
-      if (job.status === "done") {
-        if (job.sources_used?.length) {
-          console.log("CPAS RAG sources:", job.sources_used.join(" | "));
-        }
-        return job.text || "Generation failed.";
-      }
-
-      if (job.status === "error") {
-        throw new Error(job.error || "Generation failed");
-      }
-    }
-
-    throw new Error("Generation timed out after 5 minutes.");
-
-  } catch(e) {
-    // Fallback to direct claude.cjs if background function fails
-    console.warn("RAG fallback:", e.message);
-    if (onStatus) onStatus("Falling back to direct generation...");
-    try {
-      const res = await fetch("/.netlify/functions/claude", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, systemPrompt }),
-      });
-      const data = await res.json();
-      return data.text || data.content?.[0]?.text || "Generation failed.";
-    } catch(e2) { return "Error: " + e2.message; }
-  }
+      body: JSON.stringify({ prompt, systemPrompt }),
+    });
+    if (!res.ok) return "Error: API returned " + res.status;
+    const data = await res.json();
+    if (data.error) return "Error: " + data.error;
+    return data.text || data.content?.[0]?.text || "Generation failed.";
+  } catch(e) { return "Error: " + e.message; }
 }
-
 
 
 async function downloadAsWord(docType, text, intake) {
