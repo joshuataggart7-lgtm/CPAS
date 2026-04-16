@@ -2457,6 +2457,14 @@ const WIZARD_STEPS = [
     sub:"Full name of the designated COR or COTR for this acquisition.", type:"text" },
   { key:"techRepEmail", q:"Technical Representative (COR/COTR) email?",
     sub:"The Tech Rep who will certify the facts in acquisition documents.", type:"text" },
+  { key:"supportCode", q:"Support Code (optional)?",
+    sub:"Branch tracking code — PX, RE, RS, RD, R, SG, HQ. Drives branch workload report.", type:"text", optional:true },
+  { key:"directorate", q:"Directorate (optional)?",
+    sub:"S, R, P, T, D, HQ, TBD. Used for branch portfolio tracking.", type:"text", optional:true },
+  { key:"primaryFunding", q:"Primary funding organization (optional)?",
+    sub:"SMD, STMD, ARMD, SCMD, SOMD, SSMS, BARDA. Drives reporting and data calls.", type:"text", optional:true },
+  { key:"impactStatement", q:"Mission impact statement (optional)?",
+    sub:"One sentence: what happens if this contract is delayed or cancelled. Used in branch reports and data calls.", type:"text", optional:true },
 ];
 
 const C = {
@@ -4744,6 +4752,7 @@ function CPAS() {
   });
   const [showTechEval, setShowTechEval] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
+  const [astroAwardTrigger, setAstroAwardTrigger] = useState(false);
   const [showOfficeReadiness, setShowOfficeReadiness] = useState(false);
 
   useEffect(()=>{
@@ -4881,6 +4890,10 @@ function CPAS() {
       contract_type: data.contractType || "",
       competition: (data.competitionStrategy || "").replace(/_/g, " "),
       naics: data.naics || "",
+      support_code: data.supportCode || "",
+      directorate: data.directorate || "",
+      primary_funding: data.primaryFunding || "",
+      impact_statement: data.impactStatement || "",
     }).then(row => {
       if (row?.id) {
         setAcquisitionId(row.id);
@@ -4950,6 +4963,9 @@ function CPAS() {
     // When award document step completes, prompt to record award details
     if (id === "P6S5") {
       setTimeout(() => setAwardModal(true), 400);
+      // Astro award easter egg
+      setAstroAwardTrigger(true);
+      setTimeout(() => setAstroAwardTrigger(false), 6000);
     }
   }
 
@@ -5728,7 +5744,7 @@ function CPAS() {
     {showOfficeReadiness && (
       <OfficeReadiness onClose={() => setShowOfficeReadiness(false)} />
     )}
-    <AstroAssistant context={resolveAstroContext({
+    <AstroAssistant triggerAward={astroAwardTrigger} context={resolveAstroContext({
       screen,
       showClauseMatrix,
       showAttachments,

@@ -282,7 +282,7 @@ function AstroBubble({ tip, onClose, onDismiss }) {
 }
 
 // ─── Main Astro Component ─────────────────────────────────────
-export default function AstroAssistant({ context = "general", onComplete }) {
+export default function AstroAssistant({ context = "general", onComplete, triggerAward = false }) {
   const [enabled, setEnabled] = useState(() => {
     const v = localStorage.getItem("cpas_astro_enabled");
     return v === null ? true : v === "true";
@@ -332,12 +332,18 @@ export default function AstroAssistant({ context = "general", onComplete }) {
     localStorage.setItem("cpas_astro_dismissed", JSON.stringify([...dismissed]));
   }, [dismissed]);
 
-  // Expose thumbsup trigger for parent
+  // Award easter egg — triggered by parent when P6S5 completes
   useEffect(() => {
-    if (onComplete) {
-      // Parent can call setAstroMood("thumbsup") via ref — see App.jsx wiring
-    }
-  }, []);
+    if (!triggerAward) return;
+    setMood("thumbsup");
+    setTip({
+      id: "award-complete",
+      text: "Contract awarded. File secured. Good work, CO. Mission support standing by for the next one.",
+    });
+    // Pulse antenna 3 times then return to idle
+    const t = setTimeout(() => { setMood("idle"); }, 5000);
+    return () => clearTimeout(t);
+  }, [triggerAward]);
 
   // Get tips for current context, minus dismissed
   const allTips = [...(TIPS[context] || []), ...TIPS.general].filter(t => !dismissed.has(t.id));
