@@ -968,12 +968,18 @@ function AwardRecordModal({ intake, acquisitionId, sbUrl, sbKey, onClose, onSave
 }
 
 function HQDashboard({ onClose }) {
-  const [pin, setPin] = useState("");
-  const [authed, setAuthed] = useState(false);
+  const SB_URL = "https://ylzdfcyiyznazvvbqdam.supabase.co";
+  const SB_KEY = "sb_publishable_adMOxPm4Sd5fcUXRf9qKdw_VpwR382c";
+  const SB_H   = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` };
+
+  const [pin, setPin]         = useState("");
+  const [authed, setAuthed]   = useState(false);
   const [pinError, setPinError] = useState(false);
-  const [data, setData] = useState([]);
+  const [acqs, setAcqs]       = useState([]);   // cpas_acquisitions
+  const [pkgs, setPkgs]       = useState([]);   // requestor portal packages
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [centerFilter, setCenterFilter] = useState("ALL");
 
   function tryPin() {
     if (pin === HQ_PIN) { setAuthed(true); loadData(); }
@@ -983,181 +989,347 @@ function HQDashboard({ onClose }) {
   async function loadData() {
     setLoading(true);
     try {
-      const r = await fetch(`${PKG_API}/list`);
-      const rows = await r.json();
-      setData(Array.isArray(rows) ? rows : []);
+      // Pull both data sources in parallel
+      const [acqRes, pkgRes] = await Promise.all([
+        fetch(`${SB_URL}/rest/v1/cpas_acquisitions?select=*&order=created_at.desc&limit=500`, { headers: SB_H }),
+        fetch(`${PKG_API}/list`).catch(() => ({ json: () => ([]) })),
+      ]);
+      const acqData = await acqRes.json();
+      const pkgData = await pkgRes.json();
+      setAcqs(Array.isArray(acqData) ? acqData : []);
+      setPkgs(Array.isArray(pkgData) ? pkgData : []);
     } catch(e) { console.error(e); }
     setLoading(false);
   }
 
-  const s = { background:"#ffffff", border:"1px solid #2a4a7a", borderRadius:8,
-    width:900, maxWidth:"97vw", maxHeight:"93vh", display:"flex", flexDirection:"column" };
+  // ── Derived metrics ────────────────────────────────────────────────
+  const filtered = centerFilter === "ALL" ? acqs : acqs.filter(a => a.center === centerFilter);
+  const centers  = [...new Set(acqs.map(a => a.center).filter(Boolean))].sort();
 
-  const inp = { background:"#ffffff", border:"1px solid #dde3ef", color:"#1a2332",
-    padding:"10px 14px", borderRadius:4, fontSize:14, fontFamily:"var(--font-sans, system-ui)",
-    textAlign:"center", letterSpacing:6, width:160 };
+  const val = (a) => parseFloat(a.value || a.current_value || 0);
+
+  const totalValue    = filtered.reduce((s,a) => s + val(a), 0);
+  const preAward      = filtered.filter(a => a.status === "Pre-Award");
+  const postAward     = filtered.filter(a => a.status === "Post-Award" || a.status === "Awarded");
+  const closeout      = filtered.filter(a => a.status === "Closeout");
+  const over10M       = filtered.filter(a => val(a) >= 10000000);
+  const nraList       = filtered.filter(a => a.is_nra);
+  const soloSource    = filtered.filter(a => a.competition_strategy === "SOLE_SOURCE" || a.competitionStrategy === "SOLE_SOURCE");
+  const ffpContracts  = filtered.filter(a => a.contract_type === "FFP" || a.contractType === "FFP");
+  const costType      = filtered.filter(a => ["CPFF","CPAF","CPIF","T&M","LH"].includes(a.contract_type || a.contractType));
+  const anosca        = filtered.filter(a => val(a) >= 7000000 && a.status === "Pre-Award");
+  const highImpact    = filtered.filter(a => a.impact_statement && a.impact_statement.length > 10);
+  const preAwardValue = preAward.reduce((s,a) => s + val(a), 0);
+  const postAwardValue = postAward.reduce((s,a) => s + val(a), 0);
+
+  // Center-level rollups
+  const centerStats = centers.map(c => {
+    const ca = acqs.filter(a => a.center === c);
+    return {
+      center: c,
+      total: ca.length,
+      preAward: ca.filter(a => a.status === "Pre-Award").length,
+      postAward: ca.filter(a => a.status === "Post-Award" || a.status === "Awarded").length,
+      closeout: ca.filter(a => a.status === "Closeout").length,
+      value: ca.reduce((s,a) => s + val(a), 0),
+      over10M: ca.filter(a => val(a) >= 10000000).length,
+      nra: ca.filter(a => a.is_nra).length,
+      soleSource: ca.filter(a => a.competition_strategy === "SOLE_SOURCE" || a.competitionStrategy === "SOLE_SOURCE").length,
+      ffp: ca.filter(a => a.contract_type === "FFP" || a.contractType === "FFP").length,
+      costType: ca.filter(a => ["CPFF","CPAF","CPIF","T&M","LH"].includes(a.contract_type || a.contractType)).length,
+      anosca: ca.filter(a => val(a) >= 7000000 && a.status === "Pre-Award").length,
+    };
+  }).sort((a,b) => b.value - a.value);
+
+  // ── Style helpers ──────────────────────────────────────────────────
+  const C = {
+    navy:"#0B3D91", blue:"#1a5aaa", gold:"#854f0b",
+    green:"#0f6e56", red:"#a32d2d", purple:"#5a3a9e",
+    bg:"#fff", bg2:"#f8f9fc", border:"#dde3ef",
+    muted:"#6b7a99", text:"#1a2332",
+  };
+  const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 
   const tab = (id, label) => (
     <button onClick={()=>setActiveTab(id)} style={{
-      background: activeTab===id ? "#1a3a6e" : "transparent",
-      border: `1px solid ${activeTab===id ? "#1a3a6e" : "#dde3ef"}`,
-      color: activeTab===id ? "#ffffff" : "#6b7a99",
-      padding:"6px 16px", borderRadius:4, cursor:"pointer", fontSize:11, fontWeight:"bold"
+      background: activeTab===id ? C.navy : "transparent",
+      border: `1px solid ${activeTab===id ? C.navy : C.border}`,
+      color: activeTab===id ? "#fff" : C.muted,
+      padding:"6px 14px", borderRadius:4, cursor:"pointer", fontSize:11, fontWeight:"bold",
+      fontFamily:FONT,
     }}>{label}</button>
   );
 
-  // Computed stats
-  const total = data.length;
-  const pending = data.filter(d=>d.status==="PENDING").length;
-  const assigned = data.filter(d=>d.status==="ASSIGNED").length;
-  const inProgress = data.filter(d=>d.status==="IN_PROGRESS").length;
-  const rejected = data.filter(d=>d.status==="REJECTED").length;
-  const totalValue = data.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-  const avgDaysToAssign = (() => {
-    const assigned = data.filter(d=>d.assigned_at&&d.submitted_at);
-    if (!assigned.length) return null;
-    const avg = assigned.reduce((s,d)=>s+Math.floor((new Date(d.assigned_at)-new Date(d.submitted_at))/86400000),0)/assigned.length;
-    return avg.toFixed(1);
-  })();
-  const byCenter = data.reduce((acc,d)=>{ acc[d.center]=(acc[d.center]||0)+1; return acc; },{});
-  const highValue = data.filter(d=>parseFloat(d.value)>=7000000);
-  const stalled = data.filter(d=>d.status==="PENDING"&&Math.floor((Date.now()-new Date(d.submitted_at).getTime())/86400000)>=5);
-
-  const statBox = (label, value, color="#2255a4", sub) => (
-    <div style={{ background:"#eef1f6", border:`1px solid ${color}33`, borderRadius:6, padding:"14px 18px", flex:1, minWidth:120 }}>
-      <div style={{ fontSize:9, color:color, letterSpacing:"0.5px", textTransform:"uppercase", marginBottom:4 }}>{label}</div>
-      <div style={{ fontSize:28, color:color, fontWeight:"bold", lineHeight:1 }}>{value}</div>
-      {sub && <div style={{ fontSize:10, color:"#6b7a99", marginTop:4 }}>{sub}</div>}
+  const statBox = (label, value, color=C.navy, sub=null, warn=false) => (
+    <div style={{
+      background: warn ? "#fff8f0" : C.bg2,
+      border:`1px solid ${warn ? "#f4c542" : color}33`,
+      borderTop: `3px solid ${warn ? "#f4c542" : color}`,
+      borderRadius:6, padding:"14px 16px", flex:1, minWidth:110,
+    }}>
+      <div style={{ fontSize:9, color:C.muted, letterSpacing:"0.5px", textTransform:"uppercase", marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:26, color, fontWeight:"bold", lineHeight:1 }}>{value}</div>
+      {sub && <div style={{ fontSize:10, color:C.muted, marginTop:4 }}>{sub}</div>}
     </div>
   );
 
-  const barChart = (items, colorFn) => {
-    const max = Math.max(...items.map(i=>i.count), 1);
-    return items.map((item,i) => (
-      <div key={i} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-        <div style={{ width:120, color:"#4a5a78", fontSize:11, textAlign:"right", flexShrink:0 }}>{item.label}</div>
-        <div style={{ flex:1, background:"#eef1f6", borderRadius:3, height:22, overflow:"hidden" }}>
-          <div style={{ width:`${(item.count/max)*100}%`, background:colorFn(item), height:"100%",
-            borderRadius:3, minWidth:item.count?4:0, display:"flex", alignItems:"center", paddingLeft:8 }}>
-            {item.count > 0 && <span style={{ fontSize:10, color:"#fff", fontWeight:"bold" }}>{item.count}</span>}
-          </div>
-        </div>
-        <div style={{ width:80, color:"#6b7a99", fontSize:10, flexShrink:0 }}>
-          {item.value ? `$${(item.value/1000000).toFixed(1)}M` : ""}
-        </div>
-      </div>
-    ));
-  };
+  const fmtM = (v) => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
 
+  const miniBar = (pct, color=C.navy) => (
+    <div style={{ height:4, background:C.border, borderRadius:2, overflow:"hidden", marginTop:6 }}>
+      <div style={{ width:`${Math.min(pct,100)}%`, height:"100%", background:color, borderRadius:2 }}/>
+    </div>
+  );
+
+  // ── PIN gate ───────────────────────────────────────────────────────
   if (!authed) return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:998, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ background:"#ffffff", border:"1px solid #2a4a7a", borderRadius:8, padding:40, width:360, textAlign:"center" }}>
-        <div style={{ color:"#854f0b", fontWeight:"bold", fontSize:13, letterSpacing:"0.5px", marginBottom:4 }}>HQ LEADERSHIP DASHBOARD</div>
-        <div style={{ color:"#6b7a99", fontSize:11, marginBottom:24 }}>Restricted Access — Enter PIN to continue</div>
-        <div style={{ color:"#4a5a78", fontSize:10, letterSpacing:"0.5px", marginBottom:8 }}>ACCESS PIN</div>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:998, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:C.bg, border:`1px solid ${C.navy}`, borderRadius:10, padding:40, width:360, textAlign:"center", fontFamily:FONT }}>
+        <div style={{ color:C.gold, fontWeight:"bold", fontSize:13, letterSpacing:"0.5px", marginBottom:4 }}>HQ LEADERSHIP DASHBOARD</div>
+        <div style={{ color:C.muted, fontSize:11, marginBottom:24 }}>Center Rollups · Portfolio Analytics · Data Call Support</div>
+        <div style={{ color:C.muted, fontSize:10, letterSpacing:"0.5px", marginBottom:8 }}>ACCESS PIN</div>
         <input type="password" maxLength={6} value={pin} onChange={e=>setPin(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&tryPin()} style={inp} autoFocus />
-        {pinError && <div style={{ color:"#a32d2d", fontSize:11, marginTop:8 }}>Incorrect PIN</div>}
+          onKeyDown={e=>e.key==="Enter"&&tryPin()}
+          style={{ background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+            padding:"10px 14px", borderRadius:4, fontSize:14, fontFamily:FONT,
+            textAlign:"center", letterSpacing:6, width:160 }} autoFocus />
+        {pinError && <div style={{ color:C.red, fontSize:11, marginTop:8 }}>Incorrect PIN</div>}
         <div style={{ display:"flex", gap:8, marginTop:16 }}>
-          <button onClick={tryPin} style={{ flex:1, background:"#1a3a6e", border:"none",
-            color:"#ffffff", padding:"10px", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:"500" }}>
-            Enter
-          </button>
-          <button onClick={onClose} style={{ flex:1, background:"#f5f7fa", border:"1px solid #dde3ef",
-            color:"#6b7a99", padding:"10px", borderRadius:7, cursor:"pointer", fontSize:12 }}>
-            CANCEL
-          </button>
+          <button onClick={tryPin} style={{ flex:1, background:C.navy, border:"none",
+            color:"#fff", padding:"10px", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:"500", fontFamily:FONT }}>Enter</button>
+          <button onClick={onClose} style={{ flex:1, background:C.bg2, border:`1px solid ${C.border}`,
+            color:C.muted, padding:"10px", borderRadius:7, cursor:"pointer", fontSize:12, fontFamily:FONT }}>Cancel</button>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:998, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={s}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:998, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:C.bg, borderRadius:10, width:"min(1100px, 97vw)", maxHeight:"94vh",
+        display:"flex", flexDirection:"column", boxShadow:"0 20px 60px rgba(11,61,145,0.25)", fontFamily:FONT }}>
+
         {/* Header */}
-        <div style={{ padding:"14px 20px", borderBottom:"0.5px solid #dde3ef", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+        <div style={{ padding:"14px 22px", borderBottom:`1px solid ${C.border}`, display:"flex",
+          justifyContent:"space-between", alignItems:"center", flexShrink:0,
+          background:"linear-gradient(135deg, #f0f4ff 0%, #fff 100%)", borderRadius:"10px 10px 0 0" }}>
           <div>
-            <div style={{ color:"#854f0b", fontWeight:"bold", fontSize:14 }}>HQ LEADERSHIP DASHBOARD</div>
-            <div style={{ color:"#6b7a99", fontSize:10, marginTop:2 }}>NASA Procurement Pipeline — All Centers</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ background:C.navy, color:"#fff", borderRadius:5, padding:"3px 9px", fontSize:9, fontWeight:600, letterSpacing:"1px" }}>HQ DASHBOARD</div>
+              <div style={{ fontSize:11, color:C.muted }}>Center Rollups · Portfolio Analytics</div>
+            </div>
+            <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>
+              {acqs.length} acquisitions across {centers.length || "—"} center{centers.length !== 1 ? "s" : ""} · {fmtM(acqs.reduce((s,a)=>s+val(a),0))} total portfolio
+            </div>
           </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <button onClick={loadData} style={{ background:"none", border:"1px solid #1a3a6e", color:"#6b7a99",
-              padding:"4px 10px", borderRadius:4, cursor:"pointer", fontSize:10 }}>↻ REFRESH</button>
-            <button onClick={onClose} style={{ background:"none", border:"none", color:"#6b7a99", fontSize:22, cursor:"pointer" }}>×</button>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {/* Center filter */}
+            <select value={centerFilter} onChange={e=>setCenterFilter(e.target.value)}
+              style={{ fontSize:11, padding:"4px 8px", border:`1px solid ${C.border}`, borderRadius:4,
+                background:C.bg, color:C.text, fontFamily:FONT, cursor:"pointer" }}>
+              <option value="ALL">All Centers</option>
+              {centers.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={loadData} style={{ background:"none", border:`1px solid ${C.border}`,
+              color:C.muted, padding:"4px 10px", borderRadius:4, cursor:"pointer", fontSize:10, fontFamily:FONT }}>↻ Refresh</button>
+            <button onClick={onClose} style={{ background:"none", border:"none", color:C.muted, fontSize:22, cursor:"pointer" }}>×</button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div style={{ padding:"10px 20px", borderBottom:"0.5px solid #dde3ef", display:"flex", gap:8, flexShrink:0 }}>
-          {tab("overview", "OVERVIEW")}
-          {tab("pipeline", "PIPELINE")}
-          {tab("attention", "NEEDS ATTENTION")}
-          {tab("centers", "BY CENTER")}
+        <div style={{ padding:"10px 22px", borderBottom:`1px solid ${C.border}`, display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
+          {tab("overview",  "Overview")}
+          {tab("centers",   "By Center")}
+          {tab("portfolio", "Portfolio")}
+          {tab("hq",        "HQ Actions")}
+          {tab("directive", "Acq Directive")}
         </div>
 
-        <div style={{ flex:1, overflow:"auto", padding:20 }}>
+        <div style={{ flex:1, overflow:"auto", padding:"20px 22px" }}>
           {loading ? (
-            <div style={{ color:"#6b7a99", textAlign:"center", padding:40 }}>Loading data...</div>
-          ) : data.length === 0 ? (
-            <div style={{ color:"#6b7a99", textAlign:"center", padding:40, border:"1px dashed #1a3a6e", borderRadius:4 }}>
-              No acquisition packages in the system yet.
+            <div style={{ color:C.muted, textAlign:"center", padding:60, fontSize:13 }}>Loading acquisitions from Supabase...</div>
+          ) : acqs.length === 0 ? (
+            <div style={{ color:C.muted, textAlign:"center", padding:60, border:`1px dashed ${C.border}`, borderRadius:8, fontSize:13 }}>
+              No acquisition data found. Acquisitions created in CPAS will appear here automatically.
             </div>
           ) : (
             <>
-              {/* OVERVIEW TAB */}
+              {/* ── OVERVIEW TAB ──────────────────────────────── */}
               {activeTab === "overview" && (
                 <div>
-                  {/* Stats strip */}
-                  <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
-                    {statBox("Total Packages", total, "#2255a4")}
-                    {statBox("Pipeline Value", `$${(totalValue/1000000).toFixed(1)}M`, "#854f0b")}
-                    {statBox("Pending Review", pending, "#854f0b", "awaiting Branch Chief")}
-                    {statBox("In Progress", inProgress, "#0f6e56", "active acquisitions")}
-                    {statBox("Avg Days to Assign", avgDaysToAssign||"—", "#5a3a9e", "submission to CO assignment")}
+                  {/* Top stat strip */}
+                  <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
+                    {statBox("Total Acquisitions", filtered.length, C.navy)}
+                    {statBox("Portfolio Value",    fmtM(totalValue), C.gold)}
+                    {statBox("Pre-Award",          preAward.length,  C.blue, `${fmtM(preAwardValue)}`)}
+                    {statBox("Post-Award",         postAward.length, C.green, `${fmtM(postAwardValue)}`)}
+                    {statBox("Over $10M",          over10M.length,   C.gold, "admin data call trigger", over10M.length > 0)}
+                    {statBox("NRA",                nraList.length,   C.purple)}
                   </div>
 
-                  {/* Status breakdown */}
-                  <div style={{ color:"#1a3a6e", fontSize:10, letterSpacing:"0.5px", marginBottom:10 }}>STATUS BREAKDOWN</div>
-                  {barChart([
-                    { label:"PENDING", count:pending, value:data.filter(d=>d.status==="PENDING").reduce((s,d)=>s+(parseFloat(d.value)||0),0) },
-                    { label:"ASSIGNED", count:assigned, value:data.filter(d=>d.status==="ASSIGNED").reduce((s,d)=>s+(parseFloat(d.value)||0),0) },
-                    { label:"IN PROGRESS", count:inProgress, value:data.filter(d=>d.status==="IN_PROGRESS").reduce((s,d)=>s+(parseFloat(d.value)||0),0) },
-                    { label:"REJECTED", count:rejected, value:0 },
-                  ], item => item.label==="PENDING"?"#854f0b":item.label==="ASSIGNED"?"#2255a4":item.label==="IN PROGRESS"?"#0f6e56":"#a32d2d")}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+                    {/* Competition breakdown */}
+                    <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:8, padding:"14px 16px" }}>
+                      <div style={{ fontSize:10, color:C.navy, letterSpacing:"0.5px", fontWeight:600, marginBottom:12 }}>COMPETITION STRATEGY</div>
+                      {[
+                        { label:"Full & Open",  count:filtered.filter(a=>["FULL_OPEN","FULL_AND_OPEN"].includes(a.competition_strategy||a.competitionStrategy)).length, color:C.green },
+                        { label:"Sole Source",  count:soloSource.length, color:C.gold },
+                        { label:"Set-Aside",    count:filtered.filter(a=>["SB_SET_ASIDE","8A","HUBZONE","SDVOSB","WOSB"].includes(a.competition_strategy||a.competitionStrategy)).length, color:C.blue },
+                        { label:"Other/TBD",    count:filtered.filter(a=>!a.competition_strategy&&!a.competitionStrategy).length, color:C.muted },
+                      ].map(({label, count, color}) => {
+                        const pct = filtered.length ? Math.round((count/filtered.length)*100) : 0;
+                        return (
+                          <div key={label} style={{ marginBottom:8 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:2 }}>
+                              <span style={{ color:C.text }}>{label}</span>
+                              <span style={{ color, fontWeight:600 }}>{count} ({pct}%)</span>
+                            </div>
+                            {miniBar(pct, color)}
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                  {/* Urgency breakdown */}
-                  <div style={{ color:"#1a3a6e", fontSize:10, letterSpacing:"0.5px", marginBottom:10, marginTop:20 }}>URGENCY BREAKDOWN</div>
-                  {barChart([
-                    { label:"URGENT", count:data.filter(d=>d.urgency==="URGENT").length },
-                    { label:"MODERATE", count:data.filter(d=>d.urgency==="MODERATE").length },
-                    { label:"NORMAL", count:data.filter(d=>d.urgency==="NORMAL").length },
-                  ], item => item.label==="URGENT"?"#a32d2d":item.label==="MODERATE"?"#854f0b":"#0f6e56")}
+                    {/* Contract type breakdown */}
+                    <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:8, padding:"14px 16px" }}>
+                      <div style={{ fontSize:10, color:C.navy, letterSpacing:"0.5px", fontWeight:600, marginBottom:12 }}>CONTRACT TYPE (ISAACMAN DIRECTIVE)</div>
+                      {[
+                        { label:"FFP",        count:ffpContracts.length, color:C.green, note:"preferred" },
+                        { label:"Cost-Type",  count:costType.length,     color:C.gold,  note:"exception — needs FFP transition plan" },
+                        { label:"IDIQ/Other", count:filtered.filter(a=>["IDIQ","BPA","BOA"].includes(a.contract_type||a.contractType)).length, color:C.blue, note:"" },
+                        { label:"TBD",        count:filtered.filter(a=>!a.contract_type&&!a.contractType).length, color:C.muted, note:"" },
+                      ].map(({label, count, color, note}) => {
+                        const pct = filtered.length ? Math.round((count/filtered.length)*100) : 0;
+                        return (
+                          <div key={label} style={{ marginBottom:8 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:2 }}>
+                              <span style={{ color:C.text }}>{label} {note && <span style={{ color:C.muted, fontSize:9 }}>— {note}</span>}</span>
+                              <span style={{ color, fontWeight:600 }}>{count} ({pct}%)</span>
+                            </div>
+                            {miniBar(pct, color)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Requestor portal pipeline */}
+                  {pkgs.length > 0 && (
+                    <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:8, padding:"14px 16px" }}>
+                      <div style={{ fontSize:10, color:C.navy, letterSpacing:"0.5px", fontWeight:600, marginBottom:12 }}>REQUESTOR PORTAL PIPELINE</div>
+                      <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                        {[
+                          { label:"Pending Review", count:pkgs.filter(p=>p.status==="PENDING").length, color:C.gold },
+                          { label:"Assigned to CO",  count:pkgs.filter(p=>p.status==="ASSIGNED").length, color:C.blue },
+                          { label:"In Progress",     count:pkgs.filter(p=>p.status==="IN_PROGRESS").length, color:C.green },
+                        ].map(({label, count, color}) => (
+                          <div key={label} style={{ background:C.bg, border:`1px solid ${color}44`, borderRadius:6, padding:"10px 14px", flex:1, minWidth:100 }}>
+                            <div style={{ fontSize:9, color:C.muted, marginBottom:2 }}>{label}</div>
+                            <div style={{ fontSize:22, color, fontWeight:700 }}>{count}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* PIPELINE TAB */}
-              {activeTab === "pipeline" && (
+              {/* ── BY CENTER TAB ─────────────────────────────── */}
+              {activeTab === "centers" && (
                 <div>
-                  <div style={{ color:"#1a3a6e", fontSize:10, letterSpacing:"0.5px", marginBottom:12 }}>ALL PACKAGES — ${(totalValue/1000000).toFixed(1)}M TOTAL PIPELINE VALUE</div>
-                  {data.sort((a,b)=>new Date(b.submitted_at)-new Date(a.submitted_at)).map((pkg,i) => {
-                    const days = Math.floor((Date.now()-new Date(pkg.submitted_at).getTime())/86400000);
-                    const statusColor = {PENDING:"#854f0b",ASSIGNED:"#2255a4",IN_PROGRESS:"#0f6e56",REJECTED:"#a32d2d"}[pkg.status]||"#6b7a99";
+                  <div style={{ fontSize:11, color:C.muted, marginBottom:16 }}>
+                    Each center's acquisition workload as captured in CPAS. Data auto-populates as COs work acquisitions — no manual entry required.
+                  </div>
+                  {centerStats.length === 0 ? (
+                    <div style={{ color:C.muted, textAlign:"center", padding:40, fontSize:13 }}>No center data found. Acquisitions need a Center field set during intake.</div>
+                  ) : centerStats.map(cs => (
+                    <div key={cs.center} style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px", marginBottom:14 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+                        <div>
+                          <div style={{ fontSize:15, fontWeight:700, color:C.text }}>{cs.center}</div>
+                          <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{cs.total} acquisition{cs.total!==1?"s":""} · {fmtM(cs.value)} total portfolio value</div>
+                        </div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {cs.over10M > 0 && (
+                            <span style={{ background:"#fff8f0", border:"1px solid #f4c542", color:C.gold,
+                              fontSize:9, padding:"3px 8px", borderRadius:10, fontWeight:600 }}>
+                              {cs.over10M} over $10M
+                            </span>
+                          )}
+                          {cs.anosca > 0 && (
+                            <span style={{ background:"#fff0f5", border:"1px solid #cc3366", color:"#cc3366",
+                              fontSize:9, padding:"3px 8px", borderRadius:10, fontWeight:600 }}>
+                              {cs.anosca} HQ announcement required
+                            </span>
+                          )}
+                          {cs.nra > 0 && (
+                            <span style={{ background:"#f0f0ff", border:`1px solid ${C.purple}44`, color:C.purple,
+                              fontSize:9, padding:"3px 8px", borderRadius:10, fontWeight:600 }}>
+                              {cs.nra} NRA
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Center metrics grid */}
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(6, 1fr)", gap:8 }}>
+                        {[
+                          { label:"Pre-Award",  value:cs.preAward,   color:C.blue },
+                          { label:"Post-Award", value:cs.postAward,  color:C.green },
+                          { label:"Closeout",   value:cs.closeout,   color:C.muted },
+                          { label:"Sole Source",value:cs.soleSource, color:C.gold },
+                          { label:"FFP",        value:cs.ffp,        color:C.green },
+                          { label:"Cost-Type",  value:cs.costType,   color: cs.costType > 0 ? C.gold : C.muted },
+                        ].map(({label, value, color}) => (
+                          <div key={label} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", textAlign:"center" }}>
+                            <div style={{ fontSize:18, fontWeight:700, color }}>{value}</div>
+                            <div style={{ fontSize:9, color:C.muted, marginTop:2 }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Value bar */}
+                      <div style={{ marginTop:12 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:C.muted, marginBottom:4 }}>
+                          <span>Portfolio value vs. agency total</span>
+                          <span style={{ color:C.navy, fontWeight:600 }}>{fmtM(cs.value)}</span>
+                        </div>
+                        {miniBar(acqs.reduce((s,a)=>s+val(a),0) ? Math.round((cs.value / acqs.reduce((s,a)=>s+val(a),0))*100) : 0, C.navy)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── PORTFOLIO TAB ─────────────────────────────── */}
+              {activeTab === "portfolio" && (
+                <div>
+                  <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+                    {filtered.length} acquisition{filtered.length!==1?"s":""} · {fmtM(totalValue)} total value
+                    {centerFilter !== "ALL" && <span style={{ color:C.navy, fontWeight:600 }}> · {centerFilter}</span>}
+                  </div>
+                  {filtered.sort((a,b) => val(b) - val(a)).map((acq, i) => {
+                    const v = val(acq);
+                    const statusColor = {
+                      "Pre-Award": C.blue, "Post-Award": C.green, "Awarded": C.green,
+                      "Closeout": C.muted, "Cancelled": C.red,
+                    }[acq.status] || C.muted;
                     return (
-                      <div key={i} style={{ background:"#ffffff", border:"1px solid #dde3ef", borderRadius:6,
-                        padding:"10px 14px", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+                      <div key={acq.id || i} style={{ background:C.bg2, border:`1px solid ${C.border}`,
+                        borderRadius:8, padding:"10px 14px", marginBottom:6,
+                        display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                         <div style={{ flex:1, minWidth:200 }}>
-                          <div style={{ color:"#1a2332", fontSize:12, fontWeight:"bold" }}>{pkg.req_title}</div>
-                          <div style={{ color:"#6b7a99", fontSize:10, marginTop:2 }}>
-                            {pkg.cor_name} · {pkg.center} · {new Date(pkg.submitted_at).toLocaleDateString()}
+                          <div style={{ fontSize:12, fontWeight:600, color:C.text }}>{acq.req_title || acq.reqTitle || "Untitled"}</div>
+                          <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                            {acq.center} · {acq.co_name || acq.coName || "CO TBD"} · {acq.naics || ""} · {acq.contract_type || acq.contractType || ""}
                           </div>
                         </div>
                         <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                          <span style={{ color:"#1a2332", fontSize:11, fontWeight:"bold" }}>${(parseFloat(pkg.value)||0).toLocaleString()}</span>
-                          {pkg.assigned_to_name && <span style={{ color:"#0f6e56", fontSize:10 }}>→ {pkg.assigned_to_name}</span>}
-                          <span style={{ background:statusColor+"22", color:statusColor, border:`1px solid ${statusColor}`,
-                            fontSize:9, padding:"2px 7px", borderRadius:10 }}>{pkg.status}</span>
-                          <span style={{ color: days>=5?"#a32d2d":"#6b7a99", fontSize:10 }}>{days}d</span>
+                          <span style={{ fontSize:12, fontWeight:700, color:C.navy }}>{fmtM(v)}</span>
+                          {v >= 10000000 && <span style={{ background:"#fff8f0", border:"1px solid #f4c542", color:C.gold, fontSize:9, padding:"2px 6px", borderRadius:8 }}>$10M+</span>}
+                          {acq.is_nra && <span style={{ background:"#f0f0ff", border:`1px solid ${C.purple}`, color:C.purple, fontSize:9, padding:"2px 6px", borderRadius:8 }}>NRA</span>}
+                          <span style={{ background:statusColor+"22", color:statusColor, border:`1px solid ${statusColor}44`,
+                            fontSize:9, padding:"2px 8px", borderRadius:10 }}>{acq.status || "Unknown"}</span>
                         </div>
                       </div>
                     );
@@ -1165,89 +1337,113 @@ function HQDashboard({ onClose }) {
                 </div>
               )}
 
-              {/* NEEDS ATTENTION TAB */}
-              {activeTab === "attention" && (
+              {/* ── HQ ACTIONS TAB ────────────────────────────── */}
+              {activeTab === "hq" && (
                 <div>
-                  {highValue.length > 0 && (
+                  {/* ANOSCA / announcement requirements */}
+                  {anosca.length > 0 && (
                     <div style={{ marginBottom:20 }}>
-                      <div style={{ color:"#854f0b", fontSize:10, letterSpacing:"0.5px", marginBottom:10 }}>
-                        ⚠ HQ PUBLIC ANNOUNCEMENT REQUIRED (≥$7M)
+                      <div style={{ fontSize:10, color:C.gold, letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>
+                        ⚠ HQ PUBLIC ANNOUNCEMENT REQUIRED — Pre-Award Actions ≥$7M (NFS 1805.302 / PIC 26-01)
                       </div>
-                      {highValue.map((pkg,i) => (
-                        <div key={i} style={{ background:"#1a1000", border:"1px solid #f4c54244", borderRadius:6,
-                          padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      {anosca.map((a, i) => (
+                        <div key={i} style={{ background:"#fff8f0", border:"1px solid #f4c542", borderRadius:8,
+                          padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between" }}>
                           <div>
-                            <div style={{ color:"#1a2332", fontSize:12, fontWeight:"bold" }}>{pkg.req_title}</div>
-                            <div style={{ color:"#6b7a99", fontSize:10 }}>{pkg.center} · {pkg.cor_name}</div>
+                            <div style={{ fontSize:12, fontWeight:600, color:C.text }}>{a.req_title || a.reqTitle}</div>
+                            <div style={{ fontSize:10, color:C.muted }}>{a.center} · {a.co_name || a.coName} · {a.competition_strategy || a.competitionStrategy}</div>
                           </div>
                           <div style={{ textAlign:"right" }}>
-                            <div style={{ color:"#854f0b", fontWeight:"bold" }}>${(parseFloat(pkg.value)||0).toLocaleString()}</div>
-                            <div style={{ color:"#6b7a99", fontSize:10 }}>{pkg.status}</div>
+                            <div style={{ fontSize:13, fontWeight:700, color:C.gold }}>{fmtM(val(a))}</div>
+                            {val(a) >= 30000000 && <div style={{ fontSize:9, color:"#cc3366" }}>ANOSCA required ($30M+)</div>}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {stalled.length > 0 && (
+                  {/* Over $10M data call targets */}
+                  {over10M.length > 0 && (
                     <div style={{ marginBottom:20 }}>
-                      <div style={{ color:"#a32d2d", fontSize:10, letterSpacing:"0.5px", marginBottom:10 }}>
-                        🔴 STALLED — PENDING 5+ DAYS WITHOUT ASSIGNMENT
+                      <div style={{ fontSize:10, color:C.navy, letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>
+                        OVER $10M — ACQUISITION DIRECTIVE DATA CALL TARGETS
                       </div>
-                      {stalled.map((pkg,i) => {
-                        const days = Math.floor((Date.now()-new Date(pkg.submitted_at).getTime())/86400000);
-                        return (
-                          <div key={i} style={{ background:"#fff0f0", border:"1px solid #cc333344", borderRadius:6,
-                            padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                            <div>
-                              <div style={{ color:"#1a2332", fontSize:12, fontWeight:"bold" }}>{pkg.req_title}</div>
-                              <div style={{ color:"#6b7a99", fontSize:10 }}>{pkg.center} · {pkg.cor_name}</div>
-                            </div>
-                            <div style={{ textAlign:"right" }}>
-                              <div style={{ color:"#a32d2d", fontWeight:"bold" }}>{days} days waiting</div>
-                              <div style={{ color:"#6b7a99", fontSize:10 }}>${(parseFloat(pkg.value)||0).toLocaleString()}</div>
+                      {over10M.sort((a,b)=>val(b)-val(a)).map((a,i) => (
+                        <div key={i} style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:8,
+                          padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div>
+                            <div style={{ fontSize:12, fontWeight:600, color:C.text }}>{a.req_title || a.reqTitle}</div>
+                            <div style={{ fontSize:10, color:C.muted }}>
+                              {a.center} · {a.co_name || a.coName} · {a.contract_type || a.contractType} · {a.status}
                             </div>
                           </div>
-                        );
-                      })}
+                          <div style={{ textAlign:"right" }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{fmtM(val(a))}</div>
+                            <div style={{ fontSize:9, color:C.muted }}>{a.competition_strategy || a.competitionStrategy || "competition TBD"}</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
 
-                  {highValue.length === 0 && stalled.length === 0 && (
-                    <div style={{ color:"#0f6e56", textAlign:"center", padding:40, border:"1px dashed #1a3a6e", borderRadius:4 }}>
-                      ✓ No items currently requiring attention.
+                  {anosca.length === 0 && over10M.length === 0 && (
+                    <div style={{ color:C.green, textAlign:"center", padding:60, border:`1px dashed ${C.border}`, borderRadius:8, fontSize:13 }}>
+                      ✓ No actions currently requiring HQ attention.
                     </div>
                   )}
                 </div>
               )}
 
-              {/* BY CENTER TAB */}
-              {activeTab === "centers" && (
+              {/* ── ACQUISITION DIRECTIVE TAB ─────────────────── */}
+              {activeTab === "directive" && (
                 <div>
-                  <div style={{ color:"#1a3a6e", fontSize:10, letterSpacing:"0.5px", marginBottom:12 }}>ACQUISITION ACTIVITY BY CENTER</div>
-                  {Object.entries(byCenter).sort((a,b)=>b[1]-a[1]).map(([center, count],i) => {
-                    const centerValue = data.filter(d=>d.center===center).reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-                    const centerInProgress = data.filter(d=>d.center===center&&d.status==="IN_PROGRESS").length;
-                    const centerPending = data.filter(d=>d.center===center&&d.status==="PENDING").length;
-                    return (
-                      <div key={i} style={{ background:"#ffffff", border:"1px solid #dde3ef", borderRadius:6,
-                        padding:"14px 18px", marginBottom:10 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                          <div style={{ color:"#1a2332", fontWeight:"bold", fontSize:13 }}>{center}</div>
-                          <div style={{ color:"#854f0b", fontWeight:"bold" }}>${(centerValue/1000000).toFixed(1)}M total</div>
-                        </div>
-                        <div style={{ display:"flex", gap:16, fontSize:11 }}>
-                          <span><span style={{ color:"#6b7a99" }}>Total: </span><span style={{ color:"#1a2332" }}>{count}</span></span>
-                          <span><span style={{ color:"#6b7a99" }}>Pending: </span><span style={{ color:"#854f0b" }}>{centerPending}</span></span>
-                          <span><span style={{ color:"#6b7a99" }}>In Progress: </span><span style={{ color:"#0f6e56" }}>{centerInProgress}</span></span>
-                        </div>
-                        {/* Mini bar */}
-                        <div style={{ marginTop:10, background:"#ffffff", borderRadius:3, height:6, overflow:"hidden" }}>
-                          <div style={{ width:`${(count/total)*100}%`, background:"#2255a4", height:"100%", borderRadius:3 }} />
-                        </div>
+                  <div style={{ background:"#f0f4ff", border:`1px solid ${C.navy}33`, borderRadius:8, padding:"12px 16px", marginBottom:20, fontSize:11, color:C.navy }}>
+                    NASA Acquisition Simplification Directive — Isaacman. FFP is the default contract type. Cost-type contracts require a transition-to-FFP plan. This view shows the agency-wide posture on contract type compliance per NFS CG 1816.2.
+                  </div>
+
+                  {/* Agency-wide FFP vs cost-type */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:20 }}>
+                    {[
+                      { label:"FFP Contracts", value:ffpContracts.length, total:filtered.length, color:C.green, note:"Aligned with directive" },
+                      { label:"Cost-Type Contracts", value:costType.length, total:filtered.length, color:C.gold, note:"Exception — requires FFP plan" },
+                      { label:"Other / TBD", value:filtered.length - ffpContracts.length - costType.length, total:filtered.length, color:C.muted, note:"Contract type not yet set" },
+                    ].map(({label, value, total, color, note}) => (
+                      <div key={label} style={{ background:C.bg2, border:`1px solid ${color}44`, borderRadius:8, padding:"14px 16px" }}>
+                        <div style={{ fontSize:9, color:C.muted, letterSpacing:"0.5px", marginBottom:4, textTransform:"uppercase" }}>{label}</div>
+                        <div style={{ fontSize:28, color, fontWeight:700, lineHeight:1 }}>{value}</div>
+                        <div style={{ fontSize:9, color:C.muted, marginTop:4 }}>{total ? Math.round((value/total)*100) : 0}% of portfolio · {note}</div>
+                        {miniBar(total ? Math.round((value/total)*100) : 0, color)}
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+
+                  {/* Cost-type detail — these are the ones that need scrutiny */}
+                  {costType.length > 0 ? (
+                    <div>
+                      <div style={{ fontSize:10, color:C.gold, letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>
+                        COST-TYPE CONTRACTS — EACH REQUIRES DOCUMENTED FFP TRANSITION PLAN (NFS CG 1816.2/1816.3)
+                      </div>
+                      {costType.map((a,i) => (
+                        <div key={i} style={{ background:"#fff8f0", border:"1px solid #f4c54244", borderRadius:8,
+                          padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div>
+                            <div style={{ fontSize:12, fontWeight:600, color:C.text }}>{a.req_title || a.reqTitle}</div>
+                            <div style={{ fontSize:10, color:C.muted }}>{a.center} · {a.co_name || a.coName} · {a.contract_type || a.contractType} · {a.status}</div>
+                          </div>
+                          <div style={{ textAlign:"right" }}>
+                            <div style={{ fontSize:12, fontWeight:700, color:C.gold }}>{fmtM(val(a))}</div>
+                            <div style={{ fontSize:9, color: a.impact_statement ? C.green : C.red }}>
+                              {a.impact_statement ? "✓ Impact statement on file" : "⚠ No impact statement"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color:C.green, textAlign:"center", padding:40, border:`1px dashed ${C.border}`, borderRadius:8, fontSize:13 }}>
+                      ✓ No cost-type contracts in the current filtered portfolio.
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -1258,7 +1454,7 @@ function HQDashboard({ onClose }) {
   );
 }
 
-// ── Branch Chief Dashboard ────────────────────────────────────────────────────
+
 function BranchChiefDashboard({ onClose }) {
   const [email, setEmail] = useState(() => localStorage.getItem("cpas_bc_email") || "");
   const [emailInput, setEmailInput] = useState("");
