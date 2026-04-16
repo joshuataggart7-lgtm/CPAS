@@ -227,17 +227,41 @@ function buildRoadmap(intake) {
 
 // Status messages shown during generation
 async function callAI(prompt, systemPrompt, docType, onStatus) {
+  // Call Anthropic directly from browser — bypasses Netlify 10s function timeout
+  // API key stored in sessionStorage (cleared on tab close, safer than localStorage)
+  let apiKey = sessionStorage.getItem("cpas_api_key") || localStorage.getItem("cpas_api_key");
+  if (!apiKey) {
+    apiKey = window.prompt("Enter your Anthropic API key (sk-ant-...) — stored for this session only:");
+    if (!apiKey) return "No API key provided.";
+    sessionStorage.setItem("cpas_api_key", apiKey.trim());
+  }
   try {
     if (onStatus) onStatus("Generating document...");
-    const res = await fetch("/.netlify/functions/claude", {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, systemPrompt }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey.trim(),
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 6000,
+        system: systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional, complete procurement documents compliant with FAR and NFS. Use bracketed placeholders like [Contract No.], [Date] for identifiers the CO must fill in.",
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
-    if (!res.ok) return "Error: API returned " + res.status;
     const data = await res.json();
-    if (data.error) return "Error: " + data.error;
-    return data.text || data.content?.[0]?.text || "Generation failed.";
+    if (data.error) {
+      if (data.error.type === "authentication_error") {
+        sessionStorage.removeItem("cpas_api_key");
+        localStorage.removeItem("cpas_api_key");
+        return "Invalid API key — cleared. Click Generate again to re-enter.";
+      }
+      return "Error: " + data.error.message;
+    }
+    return data.content?.[0]?.text || "Generation failed.";
   } catch(e) { return "Error: " + e.message; }
 }
 
