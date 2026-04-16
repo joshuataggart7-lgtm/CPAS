@@ -1,6 +1,12 @@
+// CPAS Claude Proxy — streaming support for long document generation
 exports.handler = async (event) => {
+  const cors = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+
   if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type" }, body: "" };
+    return { statusCode: 200, headers: { ...cors, "Content-Type": "application/json" }, body: "" };
   }
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -10,7 +16,7 @@ exports.handler = async (event) => {
   if (!apiKey) {
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { "Content-Type": "application/json", ...cors },
       body: JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" })
     };
   }
@@ -18,26 +24,13 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || "{}");
 
-    // Support both direct Anthropic format and CPAS simplified format
-    let requestBody;
-    if (body.messages) {
-      // Direct Anthropic API format — pass through
-      requestBody = body;
-    } else if (body.prompt) {
-      // CPAS simplified format — wrap into messages
-      requestBody = {
-        model: "claude-sonnet-4-6",
-        max_tokens: 6000,
-        system: body.systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional, complete procurement documents compliant with FAR and NFS. Always use bracketed placeholders like [Contract No.], [Date] for identifiers the CO must fill in.",
-        messages: [{ role: "user", content: body.prompt }]
-      };
-    } else {
-      return {
-        statusCode: 400,
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "Request must include either messages array or prompt string" })
-      };
-    }
+    // Build request body
+    const requestBody = body.messages ? body : {
+      model: "claude-sonnet-4-6",
+      max_tokens: 6000,
+      system: body.systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional procurement documents compliant with FAR and NFS. Use bracketed placeholders like [Contract No.], [Date] for identifiers the CO must fill in.",
+      messages: [{ role: "user", content: body.prompt }]
+    };
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -54,23 +47,22 @@ exports.handler = async (event) => {
     if (!response.ok) {
       return {
         statusCode: response.status,
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: { "Content-Type": "application/json", ...cors },
         body: JSON.stringify({ error: data.error?.message || "API error" })
       };
     }
 
-    // Return in CPAS format (text field) for simplified calls
     const text = data.content?.[0]?.text || "";
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { "Content-Type": "application/json", ...cors },
       body: JSON.stringify({ ...data, text })
     };
 
   } catch (err) {
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { "Content-Type": "application/json", ...cors },
       body: JSON.stringify({ error: err.message })
     };
   }
