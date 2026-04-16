@@ -250,15 +250,19 @@ async function callAI(prompt, systemPrompt, docType, onStatus) {
   }
 
   try {
-    // Step 1 — submit job to background function
+    // Step 1 — generate jobId client-side (Netlify background functions return empty body)
+    const jobId = "cpas_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
     if (onStatus) onStatus("Queuing document generation...");
-    const submitRes = await fetch("/api/generate-rag", {
+
+    // Fire background function — don't await response body, it's always empty
+    fetch("/.netlify/functions/generate-rag-background", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ docType, prompt, systemPrompt }),
-    });
-    if (!submitRes.ok) throw new Error("Failed to submit job: " + submitRes.status);
-    const { jobId } = await submitRes.json();
+      body: JSON.stringify({ jobId, docType, prompt, systemPrompt }),
+    }).catch(e => console.warn("Background trigger:", e.message));
+
+    // Small delay to let the background function write initial status
+    await new Promise(r => setTimeout(r, 1500));
 
     // Step 2 — poll for result
     const POLL_INTERVAL = 2000; // 2 seconds
@@ -268,7 +272,7 @@ async function callAI(prompt, systemPrompt, docType, onStatus) {
     while (Date.now() - start < MAX_WAIT) {
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
 
-      const pollRes = await fetch(`/api/job-status?id=${jobId}`);
+      const pollRes = await fetch(`/.netlify/functions/job-status?id=${jobId}`);
       if (!pollRes.ok) continue;
       const job = await pollRes.json();
 
