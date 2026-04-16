@@ -79,7 +79,7 @@ exports.handler = async (event) => {
   try {
     const { jobId: clientJobId, docType, prompt, systemPrompt } = JSON.parse(event.body || "{}");
     jobId = clientJobId || ("cpas_" + Date.now());
-    store = getStore({ name: "cpas-jobs", consistency: "strong" });
+    store = getStore("cpas-jobs");
 
     if (!prompt) {
       await store.setJSON(jobId, { status: "error", error: "prompt required" });
@@ -138,7 +138,7 @@ exports.handler = async (event) => {
 
   } catch (err) {
     try {
-      const store = getStore({ name: "cpas-jobs", consistency: "strong" });
+      const store = getStore("cpas-jobs");
       await store.setJSON(jobId, { status: "error", error: err.message });
     } catch(e) {}
   }

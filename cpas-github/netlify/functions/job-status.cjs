@@ -1,6 +1,3 @@
-// CPAS Job Status Poller
-// GET /.netlify/functions/job-status?id={jobId}
-
 const { getStore } = require("@netlify/blobs");
 
 const cors = {
@@ -16,21 +13,13 @@ exports.handler = async (event) => {
   if (!jobId) return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "id required" }) };
 
   try {
-    const store = getStore({ name: "cpas-jobs", consistency: "strong" });
+    const store = getStore("cpas-jobs");
     const job = await store.get(jobId, { type: "json" });
-
-    if (!job) return { statusCode: 404, headers: cors, body: JSON.stringify({ status: "not_found" }) };
-
-    // Clean up old completed jobs
-    if ((job.status === "done" || job.status === "error") && job.completed) {
-      if (Date.now() - job.completed > 3600000) {
-        await store.delete(jobId).catch(() => {});
-      }
-    }
-
+    if (!job) return { statusCode: 200, headers: cors, body: JSON.stringify({ status: "pending" }) };
     return { statusCode: 200, headers: cors, body: JSON.stringify(job) };
-
   } catch (err) {
-    return { statusCode: 500, headers: cors, body: JSON.stringify({ error: err.message }) };
+    // If Blobs fails return pending so client keeps polling
+    console.error("job-status error:", err.message);
+    return { statusCode: 200, headers: cors, body: JSON.stringify({ status: "pending", debug: err.message }) };
   }
 };
