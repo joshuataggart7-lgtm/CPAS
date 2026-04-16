@@ -116,15 +116,29 @@ export const CLAUSE_LIBRARY = [
   },
 
   // ════════════════════════════════════════════════════════════════
-  // COMPETITION / COMPETITION REQUIREMENTS (FAR 52.206-x)
+  // 8(a) COMPETITION NOTIFICATION
+  // NOTE: FAR 52.206-1 and old FAR 6.305 NO LONGER EXIST in the current FAR.
+  // Current prescription: FAR 19.108-10(d) → 52.219-18
+  // NASA prescription:    NFS 1819.108-70(d) → 1852.219-18 (in lieu of / with FAR clause)
   // ════════════════════════════════════════════════════════════════
   {
-    num: "52.206-1",
-    title: "Competition Limited to Eligible 8(a) Concerns",
-    farRef: "FAR 19.108-10(d) / NFS 1819.108-70(d)",
-    note: "Old prescription FAR 6.305 is SUPERSEDED. Current: FAR 19.108-10(d). For NASA contracts use 1852.219-18 (NFS 1819.108-70(d)).",
+    num: "52.219-18",
+    title: "Notification of Competition Limited to Eligible 8(a) Participants",
+    farRef: "FAR 19.108-10(d)",
+    req: (p) => p.setAside === "8A" ? "REQUIRED" : null,
+    fillIns: [
+      { id: "sba_contractor", label: "SBA contractor name", placeholder: "Insert name of SBA contractor" },
+      { id: "contracting_agency", label: "Contracting agency name", placeholder: "Insert name of contracting agency" },
+    ],
+    note: "Use for competitive 8(a) acquisitions under FAR 19.107-8. For NASA contracts, use 1852.219-18 per NFS 1819.108-70(d). Old clause 52.206-1 / FAR 6.305 are SUPERSEDED and do not exist in the current FAR.",
+  },
+  {
+    num: "1852.219-18",
+    title: "Notification of Competition Limited to Eligible 8(a) Concerns (NASA)",
+    farRef: "NFS 1819.108-70(d)",
     req: (p) => p.setAside === "8A" ? "REQUIRED" : null,
     fillIns: [],
+    note: "NASA-specific 8(a) competition notification. Prescribed by NFS 1819.108-70(d) in lieu of or with FAR 52.219-18. Use Alternate I when competition is limited to specific SBA districts (FAR 19.108-4(b)). Use Alternate II when SBA has waived the nonmanufacturer rule (FAR 19.108-10(d)).",
   },
 
   // ════════════════════════════════════════════════════════════════
