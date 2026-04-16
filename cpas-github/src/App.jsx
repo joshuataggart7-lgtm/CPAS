@@ -8,6 +8,8 @@ function buildRoadmap(intake) {
   const needsMBP = value >= 50000000;
   const needsJOFOC = competitionStrategy === "SOLE_SOURCE";
   const needsSBA = value > 150000;
+  // Per NFS CG 1815.46: DCAA audits not requested for FP <$10M or cost-type <$100M
+  // This flag triggers pricing/DCMA coordination reminder at >$750K for non-commercial
   const needsDCAA = !["YES","TBD"].includes(isCommercial) && value > 750000;
   const needsLegal = value > 5000000 || needsJOFOC;
   const isMicro = lane === "MICROPURCHASE";
@@ -16,11 +18,11 @@ function buildRoadmap(intake) {
 
   phases.push({ id:"P1", title:"Package Validation",
     steps:[
-      { id:"P1S1", title:"Purchase Requisition in NCMS (CF/SAP for legacy)", type:"CHECK", nfs:"NFS 1804.7301(a); PCD 25-21 (NCMS deployed Oct 2024)" },
-      { id:"P1S2", title:"NF 1707 - Special Approvals & Affirmations", type:"CHECK", nfs:"NFS 1804.7301(a)" },
+      { id:"P1S1", title:"Purchase Requisition in NCMS (CF/SAP for legacy)", type:"CHECK", nfs:"NFS CG 1807.71 (1804.711(b)) / PCD 25-21 — PR in NCMS/SAP; NCMS mandatory for all new contracts Oct 2024+" },
+      { id:"P1S2", title:"NF 1707 - Special Approvals & Affirmations", type:"CHECK", nfs:"NFS CG 1807.71 (1804.711(a)) — NF 1707 must accompany PR; required for each acquisition unless within-scope" },
       { id:"P1S3", title:"Statement of Work / PWS", reviewType:"SOW", type:"CHECK", nfs:"NFS 1807 / NFS Companion Guide (SOW/PWS required per acquisition planning policy)" },
       { id:"P1S4", title:"IGCE", reviewType:"IGCE", type:"GENERATE", docType:"IGCE", packages:[{key:"IGCE",label:"IGCE Document",docType:"IGCE"}], nfs:"NFS 1807 / NFS Companion Guide (IGCE required per acquisition planning policy)" },
-      { id:"P1S5", title:"Funds Availability Certification", type:"CHECK", nfs:"NFS 1804.7301(b)" },
+      { id:"P1S5", title:"Funds Availability Certification", type:"CHECK", nfs:"NFS CG 1807.71(c) / FAR 32.702 — CO must not issue solicitations until approved funds certification received" },
       ...(reqType === "SERVICES" ? [{ id:"P1S6", title:"Inherently Governmental Determination", type:"CHECK", nfs:"FAR 7.503 / NFS CG 1807.51 — determination must be provided by Center requirements office" }] : []),
       ...(reqType === "IT" ? [{ id:"P1S7", title:"OCIO IT Authorization (all IT acquisitions — no IT without OCIO auth)", type:"CHECK", nfs:"NFS 1807.7000 / PN 24-09 / PCD 25-09 — required for ALL IT acquisitions regardless of vehicle, NAICS, or dollar value" }] : []),
       { id:"P1S8", title:"COR Nomination", type:"CHECK", nfs:"NFS 1801.602-2 / NFS CG 1801.42" },
@@ -106,10 +108,10 @@ function buildRoadmap(intake) {
         ] },
     ];
     if (needsJOFOC) stratSteps.push(
-      { id:"P2S5", title:"Draft JOFOC / J&A", reviewType:"JOFOC", type:"GENERATE", docType:"JOFOC", rcpoDocKey:"JOFOC", nfs:"RFO FAR 6.104-1 [FAR 6.303-2] / NFS 1806.304 per PCD 25-10" }
+      { id:"P2S5", title:"Draft JOFOC / J&A", reviewType:"JOFOC", type:"GENERATE", docType:"JOFOC", rcpoDocKey:"JOFOC", nfs:"RFO FAR 6.104-1 / NFS 1806.3 / PCD 25-10" }
     );
     if (needsAcqPlan) stratSteps.push(
-      { id:"P2S6", title:"Procurement Strategy Meeting (PSM)", type:"GENERATE", docType:"ACQ_PLAN", rcpoDocKey:"ACQ_PLAN", nfs:"NFS CG 1807.14 — Approval: >$2B/human SF=CAO | >$500M=SPE | <$500M=HCA | <$10M=Center" }
+      { id:"P2S6", title:"Procurement Strategy Meeting (PSM)", type:"GENERATE", docType:"ACQ_PLAN", rcpoDocKey:"ACQ_PLAN", nfs:"NFS CG 1807.11 — Approval: ≥$2B or human SF=CAO | ≥$1B=SPE | <$1B=HCA (delegable to one level above CO for ≤$50M) | <$10M=Center procedures" }
     );
     if (needsMBP) stratSteps.push(
       { id:"P2S7", title:"Master Buy Plan Submission", type:"CHECK", nfs:"NASA HQ Policy (Master Buy Plan — internal NASA acquisition planning requirement)" }
@@ -167,7 +169,7 @@ function buildRoadmap(intake) {
                 ? "Sources Sought / RFI — Recommended ($10M-$50M)"
                 : "Sources Sought / RFI (optional at this value)",
           type:"GENERATE", docType:"SOURCES_SOUGHT",
-          nfs:"NFS CG 1805.11 / NFS 1805.205-70 (PCD 25-16) — mandatory >$50M min 10 business days SAM.gov. NFS CG 1805.10: RFI within 30 days of concept approval; requirements package within 60 days of RFI closure; delays >14 days require leadership engagement" },
+          nfs:"NFS CG 1805.10 / FAR 5.207 / PCD 25-16 — mandatory >$50M (min 10 business days SAM.gov); RFI within 30 days of concept approval; requirements package within 60 days of RFI closure; delays >14 days require leadership engagement" },
         { id:"P4S3", title:"Market Research Report", type:"GENERATE", docType:"MARKET_RESEARCH" },
       ]
     });
@@ -205,7 +207,7 @@ function buildRoadmap(intake) {
         { id:"P6S3b", title:"Technical Evaluation (Adjectival/LPTA)", type:"GENERATE", docType:"TECH_EVAL" },
         { id:"P6S4", title:"Responsibility Determination", type:"GENERATE", docType:"RESPONSIBILITY" },
         { id:"P6S5", title:"Award Document", type:"GENERATE", docType:"AWARD_DOC", rcpoDocKey:"CONTRACT_AWARD" },
-        { id:"P6S6", title:"ANOSCA / Public Announcement", type:"GENERATE", docType:"ANOSCA", nfs:"NFS 1805.303-71 / PCD 25-16 / PIC 26-01 — HQ Public Announcement $7M+; ANOSCA required $30M+. Submit NASA Notification of Contract Action (NPA) template per NFS 1805.303-72(a)(2)" },
+        { id:"P6S6", title:"ANOSCA / Public Announcement", type:"GENERATE", docType:"ANOSCA", nfs:"NFS 1805.302 / NFS CG 1805.32 / PCD 25-16 / PIC 26-01 — HQ Public Announcement ≥$7M; ANOSCA application ≥$30M. Submit NPA template per NFS CG 1805.32" },
       ]
     });
 
@@ -213,9 +215,9 @@ function buildRoadmap(intake) {
       steps:[
         { id:"P7S1", title:"COR Appointment Letter", type:"GENERATE", docType:"COR_LETTER" },
         { id:"P7S2", title:"Post-Award Kickoff Meeting", type:"GENERATE", docType:"KICKOFF" },
-        ...(reqType === "SERVICES" ? [{ id:"P7S3", title:"QASP Implementation", type:"GENERATE", docType:"QASP", nfs:"FAR 37.604 / FAR 46.4" }] : []),
-        { id:"P7S4", title:"FPDS-NG Contract Action Report", type:"CHECK", nfs:"FAR 4.6" },
-        { id:"P7S5", title:"SAM.gov Award Notice", type:"GENERATE", packages:[{key:"POST_AWARD_SYN",label:"SAM.gov Post-Award Synopsis",docType:"POST_AWARD_SYN"}], type:"CHECK" },
+        ...(reqType === "SERVICES" ? [{ id:"P7S3", title:"QASP Implementation", type:"GENERATE", docType:"QASP", nfs:"FAR 37.604 / FAR 46.4 / NFS CG 1846.41 — QASP must NOT be included in contract; copy stored in contract file per NFS CG 1846.12(b)" }] : []),
+        { id:"P7S4", title:"FPDS-NG Contract Action Report", type:"CHECK", nfs:"FAR 4.604 / NFS CG 1804.31 — CAR submitted within 3 business days of award" },
+        { id:"P7S5", title:"SAM.gov Award Notice", packages:[{key:"POST_AWARD_SYN",label:"SAM.gov Post-Award Synopsis",docType:"POST_AWARD_SYN"}], type:"CHECK", nfs:"FAR 5.301 — award notice >$25K within timeframes per FAR Table 5-4; public announcement ≥$5.5M within day of award per FAR 5.302" },
         { id:"P7S6", title:"CPARS Performance Assessment", type:"GENERATE", docType:"CPARS" },
         { id:"P7S7", title:"Contract Closeout Checklist", type:"GENERATE", docType:"CLOSEOUT" },
       ]
@@ -226,6 +228,89 @@ function buildRoadmap(intake) {
 }
 
 // Status messages shown during generation
+// ── Optional Supplemental Context (OSC) ──────────────────────────
+// Non-blocking KB probe — 3s max timeout
+// Injects current regulatory text if available; skips silently if not
+// When Netlify timeout increases, expand window to 10s and add more chunks
+
+const OSC_TERMS = {
+  JOFOC:          ["Competition Requirements","other than full and open","1806"],
+  ACQ_PLAN:       ["1807.14","procurement strategy meeting"],
+  PNM:            ["price negotiation","15.406","price reasonableness"],
+  ANOSCA:         ["1805.302","ANOSCA","public announcement"],
+  RESPONSIBILITY: ["9.105","responsibility determination"],
+  MARKET_RESEARCH:["market research","10.001","sources sought"],
+  SOURCES_SOUGHT: ["sources sought","5.207"],
+  QASP:           ["quality assurance","1846.408"],
+  IGCE:           ["independent government cost estimate","IGCE"],
+  COR_LETTER:     ["1801.602","COR","contracting officer representative"],
+  CLAUSE_MATRIX:  ["1812.301","52.212","commercial items"],
+  FO_EXCEPTION:   ["fair opportunity","16.505"],
+  CLOSEOUT:       ["4.804","closeout"],
+};
+
+const OSC_DOC_TYPES = {
+  JOFOC:          "RFO_FAR,NFS,NFS_CG,PCD",
+  ACQ_PLAN:       "NFS,NFS_CG,RFO_FAR,PCD",
+  PNM:            "RFO_FAR,NFS,NFS_CG",
+  ANOSCA:         "NFS,NFS_CG,PIC,PCD",
+  RESPONSIBILITY: "RFO_FAR,NFS",
+  MARKET_RESEARCH:"RFO_FAR,NFS,NFS_CG",
+  SOURCES_SOUGHT: "RFO_FAR,NFS",
+  QASP:           "NFS,NFS_CG,RFO_FAR",
+  IGCE:           "NFS,NFS_CG",
+  COR_LETTER:     "NFS,NFS_CG",
+  CLAUSE_MATRIX:  "NFS,RFO_FAR,PCD",
+  FO_EXCEPTION:   "RFO_FAR,NFS",
+  CLOSEOUT:       "RFO_FAR,NFS",
+};
+
+const OSC_SB_URL = "https://ylzdfcyiyznazvvbqdam.supabase.co";
+const OSC_SB_KEY = "sb_publishable_adMOxPm4Sd5fcUXRf9qKdw_VpwR382c";
+
+async function fetchOSC(docType) {
+  const terms = OSC_TERMS[docType];
+  if (!terms?.length) return "";
+  const typeFilter = OSC_DOC_TYPES[docType] || "RFO_FAR,NFS,NFS_CG";
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000); // 3s hard limit
+
+    const term = terms[0].replace(/[%_]/g, "");
+    const url = `${OSC_SB_URL}/rest/v1/cpas_regulatory_docs?select=source,doc_type,section,content`
+      + `&or=(section.ilike.${encodeURIComponent("%"+term+"%")},keywords.ilike.${encodeURIComponent("%"+term+"%")})`
+      + `&doc_type=in.(${typeFilter})&limit=3`;
+
+    const res = await fetch(url, {
+      headers: { "apikey": OSC_SB_KEY, "Authorization": "Bearer " + OSC_SB_KEY },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return "";
+    const rows = await res.json();
+    if (!rows?.length) return "";
+
+    const PRI = { RFO_FAR:6, NFS:5, NFS_CG:4, PIC:3, PN:3, PCD:2 };
+    const sorted = rows.sort((a,b) => (PRI[b.doc_type]||0) - (PRI[a.doc_type]||0));
+
+    const chunks = sorted.map(r => {
+      const ref = [r.doc_type, r.source, r.section].filter(Boolean).join(" > ");
+      return "[" + ref + "]\n" + (r.content||"").substring(0,350);
+    }).join("\n---\n");
+
+    const sources = sorted.map(r => `${r.doc_type}: ${r.source}`).join(", ");
+    console.log("CPAS OSC sources:", sources);
+
+    return "\n\n=== CURRENT NASA REGULATORY CONTEXT ===\n" + chunks + "\n=== END - Base citations on above text where applicable ===\n";
+
+  } catch(e) {
+    // Timeout or network error — skip silently
+    return "";
+  }
+}
+
 async function callAI(prompt, systemPrompt, docType, onStatus) {
   // Call Anthropic directly from browser — bypasses Netlify 10s function timeout
   // API key stored in sessionStorage (cleared on tab close, safer than localStorage)
@@ -236,7 +321,14 @@ async function callAI(prompt, systemPrompt, docType, onStatus) {
     sessionStorage.setItem("cpas_api_key", apiKey.trim());
   }
   try {
-    if (onStatus) onStatus("Generating document...");
+    // OSC — fetch KB context (non-blocking, 3s max, skips silently on failure)
+    let oscContext = "";
+    if (docType) {
+      if (onStatus) onStatus("Checking regulatory knowledge base...");
+      oscContext = await fetchOSC(docType);
+    }
+    if (onStatus) onStatus(oscContext ? "Generating with current regulatory context..." : "Generating document...");
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -249,7 +341,7 @@ async function callAI(prompt, systemPrompt, docType, onStatus) {
         model: "claude-sonnet-4-6",
         max_tokens: 6000,
         system: systemPrompt || "You are an expert NASA Contracting Officer assistant. Generate professional, complete procurement documents compliant with FAR and NFS. Use bracketed placeholders like [Contract No.], [Date] for identifiers the CO must fill in.",
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: prompt + oscContext }],
       }),
     });
     const data = await res.json();
@@ -574,15 +666,15 @@ async function generateDoc(docType, intake, roadmap, onStatus) {
     } catch(e) {}
 
     const GENERATE_PROMPTS = {
-    JOFOC:"Write a complete NASA Justification for Other Than Full and Open Competition (JOFOC) per RFO FAR 6.104-1 [formerly FAR 6.303-2] and PCD 25-10. CRITICAL: This contract is for CONTRACTOR-OWNED aircraft services. The contractor owns and operates the modified aircraft. Do NOT mention NASA-owned aircraft. The contractor provides King Air B-200 and A-90 aircraft they own or lease. Contract type is FFP IDIQ with pre-priced catalog rates. For: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+". IMPORTANT: You must include ALL 11 required elements. Keep sections 1-4 concise (2-3 short paragraphs each). Section 5 should be the most detailed (4-6 paragraphs with specific technical facts). Sections 6-11 should be 1-2 paragraphs each. CRITICAL: Use bracketed placeholders for any specific document numbers, dates, solicitation numbers, SAM.gov notice numbers, or contract numbers that the CO must fill in — never fabricate specific numbers or dates. Include all required elements labeled exactly:\n## 1. IDENTIFICATION OF AGENCY AND CONTRACTING ACTIVITY\n## 2. NATURE OF ACTION\n## 3. DESCRIPTION OF SUPPLIES OR SERVICES\n## 4. IDENTIFICATION OF STATUTORY AUTHORITY\n## 5. DEMONSTRATION THAT AUTHORITY APPLIES\n## 6. EFFORTS TO OBTAIN COMPETITION\n## 7. ANTICIPATED COST WILL BE FAIR AND REASONABLE\n## 8. MARKET RESEARCH CONDUCTED\n## 9. OTHER FACTS SUPPORTING USE\n## 10. SOURCES THAT EXPRESSED INTEREST\n## 11. ACTIONS TO REMOVE FUTURE BARRIERS\nSection 2 must state contract type as Firm-Fixed-Price (FFP) Indefinite-Delivery Indefinite-Quantity (IDIQ) with pre-priced catalog rate task orders. Do not include signature blocks — those are added separately. Mark SOURCE SELECTION SENSITIVE at the top.",
-    ACQ_PLAN:"Write a NASA Procurement Strategy Meeting (PSM) per NFS CG 1807.14 for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+", "+(cs)+". IMPORTANT: Include ALL 19 sections. Keep each section to 2-3 concise paragraphs — do not over-elaborate. Include these 19 sections per NFS CG 1807.14: EXECUTIVE SUMMARY; 1.STATEMENT OF NEED; 2.APPLICABLE CONDITIONS (NPR 7120.5 if applicable); 3.COST/PRICE (IGCE status and basis of estimate); 4.CAPABILITY AND PERFORMANCE REQUIREMENTS; 5.DELIVERY AND PERFORMANCE PERIOD; 6.RISKS (High/Medium/Low with mitigation for each: Technical/Schedule/Cost/Funding/Safety/Security/IT Security/Environmental/Export Control/OCI); 7.ACQUISITION STREAMLINING; 8.SOURCES (OFPP required-use, NASA enterprise strategies, SSR, BIC); 9.SMALL BUSINESS (NF 1787 coordination, Rule of Two analysis, SBA PCR coordination, subcontracting goals if applicable); 10.MADE IN AMERICA (Buy American Act, Trade Agreements Act); 11.COMPETITION (strategy, authority, synopsis plan); 12.CONTRACT TYPE SELECTION (FAR 16.103(d) rationale); 13.SOURCE SELECTION APPROACH (tradeoff/LPTA/PPTO, rating method, eval factors and weights, cost realism); 14.ACQUISITION CONSIDERATIONS (options, special clauses, AI and IT accessibility per OMB M-25-22 and PIC 25-03A, security); 15.BUDGETING AND FUNDING (by FY, severable/non-severable); 16.PRODUCT AND SERVICE DESCRIPTIONS (PWS/SOW/SOO type and rationale); 17.MANAGEMENT INFORMATION REQUIREMENTS (EVM applicability); 18.CONTRACT ADMINISTRATION (change management, COR delegation plan, follow-on risk); 19.MILESTONE SCHEDULE (120-day award goal). Approval per NFS CG 1807.11: above $2B or human spaceflight=CAO; above $500M=SPE; below $500M=HCA delegable one level above CO for at or below $50M; below $10M=Center. Mark SOURCE SELECTION SENSITIVE.",
+    JOFOC:"Write a complete NASA Justification for Other Than Full and Open Competition (JOFOC) per RFO FAR 6.104-1 and PCD 25-10. CRITICAL: This contract is for CONTRACTOR-OWNED aircraft services. The contractor owns and operates the modified aircraft. Do NOT mention NASA-owned aircraft. The contractor provides King Air B-200 and A-90 aircraft they own or lease. Contract type is FFP IDIQ with pre-priced catalog rates. For: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+". IMPORTANT: You must include ALL 11 required elements. Keep sections 1-4 concise (2-3 short paragraphs each). Section 5 should be the most detailed (4-6 paragraphs with specific technical facts). Sections 6-11 should be 1-2 paragraphs each. CRITICAL: Use bracketed placeholders for any specific document numbers, dates, solicitation numbers, SAM.gov notice numbers, or contract numbers that the CO must fill in — never fabricate specific numbers or dates. Include all required elements labeled exactly:\n## 1. IDENTIFICATION OF AGENCY AND CONTRACTING ACTIVITY\n## 2. NATURE OF ACTION\n## 3. DESCRIPTION OF SUPPLIES OR SERVICES\n## 4. IDENTIFICATION OF STATUTORY AUTHORITY\n## 5. DEMONSTRATION THAT AUTHORITY APPLIES\n## 6. EFFORTS TO OBTAIN COMPETITION\n## 7. ANTICIPATED COST WILL BE FAIR AND REASONABLE\n## 8. MARKET RESEARCH CONDUCTED\n## 9. OTHER FACTS SUPPORTING USE\n## 10. SOURCES THAT EXPRESSED INTEREST\n## 11. ACTIONS TO REMOVE FUTURE BARRIERS\nSection 2 must state contract type as Firm-Fixed-Price (FFP) Indefinite-Delivery Indefinite-Quantity (IDIQ) with pre-priced catalog rate task orders. Do not include signature blocks — those are added separately. Mark SOURCE SELECTION SENSITIVE at the top.",
+    ACQ_PLAN:"Write a NASA Procurement Strategy Meeting (PSM) per NFS CG 1807.14 for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+", "+(cs)+". IMPORTANT: Include ALL 19 sections. Keep each section to 2-3 concise paragraphs — do not over-elaborate. Include these 19 sections per NFS CG 1807.14: EXECUTIVE SUMMARY; 1.STATEMENT OF NEED; 2.APPLICABLE CONDITIONS (NPR 7120.5 if applicable); 3.COST/PRICE (IGCE status and basis of estimate); 4.CAPABILITY AND PERFORMANCE REQUIREMENTS; 5.DELIVERY AND PERFORMANCE PERIOD; 6.RISKS (High/Medium/Low with mitigation for each: Technical/Schedule/Cost/Funding/Safety/Security/IT Security/Environmental/Export Control/OCI); 7.ACQUISITION STREAMLINING; 8.SOURCES (OFPP required-use, NASA enterprise strategies, SSR, BIC); 9.SMALL BUSINESS (NF 1787 coordination, Rule of Two analysis, SBA PCR coordination, subcontracting goals if applicable); 10.MADE IN AMERICA (Buy American Act, Trade Agreements Act); 11.COMPETITION (strategy, authority, synopsis plan); 12.CONTRACT TYPE SELECTION (FAR 16.103(d) and NFS CG 1816 rationale — per NFS CG 1816.2/1816.3: FFP is the default for commercial/mature/defined requirements; cost-type is the exception for genuinely immature requirements with high technical risk; all cost-type contracts must include a strategy to transition to FFP as maturity improves per the NASA acquisition simplification directive); 13.SOURCE SELECTION APPROACH (tradeoff/LPTA/PPTO, rating method, eval factors and weights, cost realism); 14.ACQUISITION CONSIDERATIONS (options, special clauses, AI and IT accessibility per OMB M-25-22 and PIC 25-03A, security); 15.BUDGETING AND FUNDING (by FY, severable/non-severable); 16.PRODUCT AND SERVICE DESCRIPTIONS (PWS/SOW/SOO type and rationale); 17.MANAGEMENT INFORMATION REQUIREMENTS (EVM applicability); 18.CONTRACT ADMINISTRATION (change management, COR delegation plan, follow-on risk); 19.MILESTONE SCHEDULE (120-day award goal). Approval per NFS CG 1807.11: above $2B or human spaceflight=CAO; above $1B=SPE; below $1B=HCA delegable one level above CO for acquisitions at or below $50M; below $10M=Center procedures per NFS CG 1807.11(d). Mark SOURCE SELECTION SENSITIVE.",
     NF1787:"Generate a completed NF 1787 Small Business Coordination Record for: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+".",
     NF1787A:"Generate a completed NF 1787A Market Research Report for: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+".",
     COORD_EMAIL_SBA:"Draft SBA PCR coordination email for: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+", strategy: "+(cs)+".",
     COORD_EMAIL_DCAA:"Draft DCAA coordination email for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+".",
     COORD_EMAIL_LEGAL:"Draft OGC review request for: \""+(t)+"\", "+(c)+", "+(v)+".",
     COORD_EMAIL_CA:"Draft Competition Advocate coordination memo for: \""+(t)+"\", "+(c)+", "+(v)+", strategy: "+(cs)+".",
-    MARKET_RESEARCH:"Write a complete Market Research Report per FAR Part 10 for: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+".",
+    MARKET_RESEARCH:"Write a complete Market Research Report per FAR Part 10 and NFS CG 1810.11/1810.12 for: \\"+(t)+"\\\", "+(c)+", "+(v)+", NAICS "+(n)+". Include: commercial item determination, small business capability assessment, existing contract vehicles, price and cost data, and NF 1787A documentation required for acquisitions above $2M per NFS CG 1810.12. Signed by CO or designated official.",
     SOURCES_SOUGHT:"Write a complete SAM.gov Sources Sought notice for: \""+(t)+"\", "+(c)+", NAICS "+(n)+".",
     SAM_SYNOPSIS:"Write a complete SAM.gov synopsis per FAR 5.207 for: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+", set-aside: "+(cs)+".",
     SOL_OVERVIEW:"Write Section B (CLINs 0001 through option 1004, pricing structure for "+(ct)+") and Section C (requirement overview, deliverables table, PoP) for: \""+(t)+"\", "+(c)+", "+(v)+".",
@@ -593,12 +685,12 @@ async function generateDoc(docType, intake, roadmap, onStatus) {
     RESPONSIBILITY:"Write an Affirmative Responsibility Determination per FAR 9.105-2 for: \""+(t)+"\", "+(c)+".",
     COR_LETTER:"Write a NASA COR Appointment Letter per NFS 1801.602-2 for: \""+(t)+"\", "+(c)+". Structure: NASA MEMORANDUM header; TO/FROM/SUBJECT block; 1.APPOINTMENT (effective dates); 2.SCOPE OF AUTHORITY (what COR may do: monitor performance, accept/reject deliverables, approve travel/overtime per contract, review invoices, maintain COR file, prepare CPARS); 3.LIMITATIONS (what COR may NOT do: direct contract changes, authorize out-of-scope work, make commitments, grant deviations); 4.REQUIRED QUALIFICATIONS (FAC-COR level I/II/III, NASA COR training per NPR 5101.10, COI certification); 5.REPORTING REQUIREMENTS; 6.ACCEPTANCE BLOCK (dual signature: CO and COR with FAC-COR certification level and expiration date).",
     KICKOFF:"Write a post-award kickoff agenda and contractor notification letter for: \""+(t)+"\", "+(c)+".",
-    QASP:"Write a NASA QASP per NFS 1846.408 for: \""+(t)+"\", "+(c)+". Structure: HEADER (contract title, center, COR, CO); 1.PURPOSE; 2.ROLES (CO has overall responsibility, COR is primary surveillance authority, Contractor maintains quality control); 3.PERFORMANCE REQUIREMENTS SUMMARY TABLE (columns: Performance Objective|Standard|AQL|Surveillance Method|Frequency - include rows for deliverables, responsiveness, NF 533 reports, CPARS); 4.SURVEILLANCE METHODS (100% inspection for critical items, periodic surveillance, random sampling, customer feedback, document review); 5.DOCUMENTATION (COR file requirements, 5-day documentation rule); 6.AI SURVEILLANCE (OMB M-25-22/PIC 25-03A - identify covered AI use cases if applicable); 7.PERFORMANCE RATINGS (Exceptional/Very Good/Satisfactory/Marginal/Unsatisfactory per FAR 42.1503); 8.REMEDIES (verbal counseling, written notification, Cure Notice per FAR 49.607, Show Cause, termination).",
+    QASP:"Write a NASA QASP per FAR 37.604 / FAR 46.4 / NFS CG 1846.41 for: \""+(t)+"\", "+(c)+". Structure: HEADER (contract title, center, COR, CO); 1.PURPOSE; 2.ROLES (CO has overall responsibility, COR is primary surveillance authority, Contractor maintains quality control); 3.PERFORMANCE REQUIREMENTS SUMMARY TABLE (columns: Performance Objective|Standard|AQL|Surveillance Method|Frequency - include rows for deliverables, responsiveness, NF 533 reports, CPARS); 4.SURVEILLANCE METHODS (100% inspection for critical items, periodic surveillance, random sampling, customer feedback, document review); 5.DOCUMENTATION (COR file requirements, 5-day documentation rule); 6.AI SURVEILLANCE (OMB M-25-22/PIC 25-03A - identify covered AI use cases if applicable); 7.PERFORMANCE RATINGS (Exceptional/Very Good/Satisfactory/Marginal/Unsatisfactory per FAR 42.1503); 8.REMEDIES (verbal counseling, written notification, Cure Notice per FAR 49.607, Show Cause, termination).",
     AWARD_DOC:"Write award document cover and key SF-1449/SF-26 blocks for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+".",
     IGCE:"Write a complete Independent Government Cost Estimate (IGCE) for: \""+(t)+"\", "+(c)+", "+(v)+", "+(ct)+"."+igceFromPortal+" Format as a professional IGCE document with: cover page, basis of estimate narrative, CLIN pricing table with quantities and extended amounts, option year pricing with 3% annual escalation, total lifecycle cost, and certification block. IMPORTANT: The IGCE is prepared by the COR or requiring activity — NOT the Contracting Officer. The certification block should show: Prepared by: [COR Name/Technical Point of Contact] and Reviewed by: [Contracting Officer Name]. If catalog rate data was provided above, use those exact rates and quantities — do not substitute different numbers. Use bracketed placeholders for any specific document numbers, dates, or identifiers the CO must fill in. Mark: SOURCE SELECTION SENSITIVE.",
-    ANOSCA:"Write a NASA Notification of Contract Action per NFS 1805.303-71 and PCD 25-16 (effective Sept 7, 2025) for: \""+(t)+"\". Note: $7M-$30M requires HQ Public Announcement only; $30M+ requires both ANOSCA and HQ Public Announcement. Include: contract title, value, contractor (TBD), description, period of performance, place of performance, competition type, set-aside status, CO contact, and public announcement language. Submission term: NASA Notification of Contract Action to Procurement Strategic Operations Division.",
+    ANOSCA:"Write a NASA Notification of Contract Action per NFS 1805.302 and NFS CG 1805.32 (PCD 25-16, effective Sept 7, 2025) for: \""+(t)+"\". Note: $7M-$30M requires HQ Public Announcement only; $30M+ requires both ANOSCA and HQ Public Announcement. Include: contract title, value, contractor (TBD), description, period of performance, place of performance, competition type, set-aside status, CO contact, and public announcement language. Submission term: NASA Notification of Contract Action to Procurement Strategic Operations Division.",
     POST_AWARD_SYN:"Write a SAM.gov post-award synopsis per FAR 5.301 for: \""+(t)+"\", "+(c)+", "+(v)+", NAICS "+(n)+". Include: contract number, award date, contractor name and address, description of work, period of performance, place of performance, competition used, set-aside type if applicable, and CO contact information.",
-    FO_EXCEPTION:"Write a Fair Opportunity Exception Determination & Findings per FAR 16.505(b)(2) for task order: \""+(t)+"\", "+(c)+", "+(v)+". Identify which of the 4 exceptions applies and document the specific facts supporting it. Include CO certification and applicable approval authority.",
+    FO_EXCEPTION:"Write a Fair Opportunity Exception Determination & Findings per RFO FAR 16.507-6(b) [formerly FAR 16.505(b)(2)] for task order: \""+(t)+"\", "+(c)+", "+(v)+". Identify which of the 4 exceptions applies and document the specific facts supporting it. Include CO certification and applicable approval authority.",
         CLOSEOUT:"Write a contract closeout checklist per FAR 4.804 for: \""+(t)+"\", "+(c)+", "+(v)+". Three columns: Required Action / Responsible Party / Date.",
   }
 
@@ -616,12 +708,21 @@ const RCPO_CHAINS = {
       { role:"Policy Reviewer", action:"R" },
       { role:"Branch Chief", action:"R" },
       { role:"Office of General Counsel", action:"R" },
-      { role:"Center Competition Advocate", action: value <= 750000 ? "A" : "C" },
+      // RFO FAR 6.104-2: ≤$900K=CO; >$900K-$20M=CA; >$20M-$150M=HCA; >$150M=SPE
+      { role: value <= 900000 ? "CO (Self-Certify)" : "Contracting Officer", action: value <= 900000 ? "A" : "R" },
     ];
-    if (value > 900000) base.push({ role:"RCPO XO", action:"Awareness" });
-    if (value > 900000) base.push({ role:"Head of Contracting Activity (HCA)", action:"A" });
-    if (value > 15000000) base.push({ role:"Agency Competition Advocate", action:"C" });
-    if (value > 15000000) base.push({ role:"Asst. Administrator for Procurement", action:"A" });
+    if (value > 900000 && value <= 20000000) {
+      base.push({ role:"Competition Advocate", action:"A", note:"Not delegable per RFO FAR 6.104-2" });
+    }
+    if (value > 20000000 && value <= 150000000) {
+      base.push({ role:"Competition Advocate", action:"C" });
+      base.push({ role:"Head of Contracting Activity (HCA)", action:"A", note:"May delegate to GS-15+ per RFO FAR 6.104-2" });
+    }
+    if (value > 150000000) {
+      base.push({ role:"Competition Advocate", action:"C" });
+      base.push({ role:"Head of Contracting Activity (HCA)", action:"C" });
+      base.push({ role:"Senior Procurement Executive (SPE)", action:"A", note:"Not delegable per RFO FAR 6.104-2" });
+    }
     if (value > 100000000) base.push({ role:"NASA Administrator", action:"A" });
     return base;
   },
@@ -720,6 +821,8 @@ import PreSolTools from "./PreSolTools.jsx";
 import RequestorPortal from "./RequestorPortal.jsx";
 import TechEvalHelper from "./TechEvalHelper.jsx";
 import AstroAssistant, { resolveAstroContext } from "./AstroAssistant.jsx";
+import OfficeReadiness from "./OfficeReadiness.jsx";
+import COChecklist from "./COChecklist.jsx";
 
 // * SET THIS to your deployed API URL (see DEPLOY.md)
 // Local dev:  "http://localhost:8080"
@@ -1753,7 +1856,7 @@ function getAcqLane(value, isCommercial, competitionStrategy) {
   if (value <= 350000) return "SIMPLIFIED"; // FAC 2025-06: SAT $350K
   if (comm && value <= 9000000) return "FAR_13_5"; // FAC 2025-06: commercial simplified $9M
   if (comm) return "FAR_12";
-  if (value <= 2000000) return "FAR_13_NONCOMMERCIAL";
+  // Non-commercial above SAT → FAR 15 (FAR 13 for non-commercial only applies up to SAT per FAR 13.000)
   return "FAR_15";
 }
 function getLaneLabel(lane) {
@@ -1968,8 +2071,8 @@ const STEP_CHECKS = {
   P2S1: ["Lane selection matches value and commercial status?", "Deviation documented if overriding?"],
   P2S4: ["Competition strategy consistent with market research?", "Set-aside analysis documented?", "Rule of Two satisfied?"],
   P2S5: [
-    "All 11 FAR 6.303-2 elements present?",
-    "JOFOC approved at correct level per RFO FAR 6.104-2 / NFS 1806.304 (PCD 25-10, PN 24-05)? — <$900K CO; $900K-$20M CA approves; $20M-$150M CA concurs HCA approves; >$150M CA+HCA+Agency CA concur SPE approves",
+    "All 11 RFO FAR 6.104-1 elements present?",
+    "JOFOC approved at correct level per RFO FAR 6.104-2? — ≤$900K: CO self-certifies; >$900K-$20M: Competition Advocate approves (not delegable); >$20M-$150M: HCA approves (may delegate); >$150M: SPE approves (not delegable)",
     "SAM.gov posting timing correct? (>$750K = post BEFORE award, 15-day comment period required per FAR 6.305(b); $25K–$750K = post within 14 days AFTER award per FAR 6.305(a))",
     "Redaction plan documented — sensitive data removed before public posting?",
     "For actions >$750K: 15-day public comment period expires before award date?"
@@ -2004,7 +2107,7 @@ const CHECKLIST = {
     {id:30,  q:"Acquisition plan approved at required level?",                       app:"All new contracts meeting thresholds"},
     {id:31,  q:"PSM conducted and minutes on file?",                                 app:"Actions >= $10M"},
     {id:32,  q:"Competition strategy decision documented with FAR basis?",           app:"All actions above SAT"},
-    {id:33,  q:"Approved JOFOC/J&A with all required FAR 6.303-2 elements?",        app:"Above SAT – other than full and open competition"},
+    {id:33,  q:"Approved JOFOC/J&A with all required RFO FAR 6.104-1 elements (11 elements per PCD 25-10)?",        app:"Above SAT – other than full and open competition"},
     {id:34,  q:"JOFOC approved at correct dollar-threshold authority level?",        app:"Actions using JOFOC"},
     {id:35,  q:"Redacted JOFOC posted to SAM.gov within required timeframe?",        app:"JOFOC actions above SAT"},
     {id:36,  q:"Completed and signed Limited Source Justification?",                 app:"Actions using FAR Part 13 limited source"},
@@ -3183,9 +3286,9 @@ Evaluate for: (1) Clear, measurable performance standards; (2) Defined deliverab
 
 Return ONLY valid JSON matching this schema: ${JSON_SCHEMA}`,
 
-  JOFOC: (ctx) => `You are a senior NASA Contracting Officer reviewing a JOFOC/J&A for compliance with FAR 6.303-2. Context: ${ctx}.
+  JOFOC: (ctx) => `You are a senior NASA Contracting Officer reviewing a JOFOC/J&A for compliance with RFO FAR 6.104-1 / PCD 25-10. Context: ${ctx}.
 
-Verify all 11 required elements: (1) Identification of agency and contracting activity; (2) Nature of action; (3) Description of supplies/services; (4) Identification of statutory authority (FAR 6.302-X); (5) Demonstration that authority applies with specific facts; (6) Efforts to obtain competition; (7) Anticipated cost is fair and reasonable; (8) Market research conducted; (9) Other supporting facts; (10) Sources that expressed interest; (11) Actions to remove future barriers. Also check: correct approval threshold authority, SOURCE SELECTION SENSITIVE marking, redaction plan for SAM posting. CRITICAL: For actions above $750,000 the JOFOC must be posted to SAM.gov BEFORE award and a 15-calendar-day public comment period must expire first (FAR 6.305(b)). For actions $25,000–$750,000 the JOFOC must be posted within 14 days AFTER award (FAR 6.305(a)). Flag if this timing is not addressed.
+Verify all 11 required elements: (1) Identification of agency and contracting activity; (2) Nature of action; (3) Description of supplies/services; (4) Identification of statutory authority (RFO FAR 6.103-1 through 6.103-6, e.g., 6.103-1 unique source); (5) Demonstration that authority applies with specific facts; (6) Efforts to obtain competition; (7) Anticipated cost is fair and reasonable; (8) Market research conducted; (9) Other supporting facts; (10) Sources that expressed interest; (11) Actions to remove future barriers. Also check: correct approval threshold authority, SOURCE SELECTION SENSITIVE marking, redaction plan for SAM posting. CRITICAL: Per RFO FAR 6.301, the JOFOC must be made publicly available within 14 days AFTER contract award (or 30 days for unusual/compelling urgency authority per 6.103-2). The justification must remain publicly available for a minimum of 30 days. Post at the GPE (SAM.gov) and agency website. There is NO pre-award posting or waiting period requirement under the RFO FAR — the old FAR 6.305(b) pre-award posting requirement was removed. Flag if posting timing is not addressed.
 
 Return ONLY valid JSON matching this schema: ${JSON_SCHEMA}`,
 
@@ -3209,7 +3312,7 @@ Return ONLY valid JSON matching this schema: ${JSON_SCHEMA}`,
 
   MARKET_RESEARCH: (ctx) => `You are a senior NASA Contracting Officer reviewing a Market Research Report for FAR Part 10 compliance. Context: ${ctx}.
 
-Evaluate: (1) Dated within 18 months of solicitation; (2) Sources consulted documented (SAM.gov, industry, GSA, etc.); (3) Commercial item determination supported; (4) Small business capability assessed; (5) Existing contract vehicles considered; (6) Price/cost data gathered; (7) Recommended acquisition approach; (8) Signed by CO or designated official.
+Evaluate: (1) Current, appropriate to the acquisition's size and complexity per FAR 10.001; (2) Sources consulted documented (SAM.gov, industry, GSA, etc.); (3) Commercial item determination supported; (4) Small business capability assessed; (5) Existing contract vehicles considered; (6) Price/cost data gathered; (7) Recommended acquisition approach; (8) Signed by CO or designated official.
 
 Return ONLY valid JSON matching this schema: ${JSON_SCHEMA}`,
 };
@@ -4119,7 +4222,7 @@ function DocQualityBtn({ docType, content }) {
   const [result, setResult] = useState(null);
 
   const DOC_CRITERIA = {
-    JOFOC: ["All 11 FAR 6.303-2 elements present","Statutory authority cited (FAR 6.302-X)","Specific facts demonstrating authority applies","Market research documented","Anticipated cost fair and reasonable","Efforts to obtain competition described","Sources that expressed interest listed","Actions to remove future barriers included","Signature block appropriate for dollar threshold"],
+    JOFOC: ["All 11 RFO FAR 6.104-1 elements present","Statutory authority cited (FAR 6.302-X)","Specific facts demonstrating authority applies","Market research documented","Anticipated cost fair and reasonable","Efforts to obtain competition described","Sources that expressed interest listed","Actions to remove future barriers included","Signature block appropriate for dollar threshold"],
     ACQ_PLAN: ["FAR 7.105 required elements covered","Contract type justified","Competition strategy documented","Milestones and schedule included","Small business strategy addressed","Market research summarized","Funding identified"],
     PNM: ["FAR 15.406-3 elements present","Proposed vs. negotiated positions documented","Basis for fair and reasonable determination","Profit/fee analysis if applicable","Contracting officer signature block"],
     MARKET_RESEARCH: ["FAR Part 10 methodology described","Sources researched identified","Commercial availability assessed","Industry standards reviewed","Conclusions and recommendation included"],
@@ -4525,7 +4628,7 @@ function ReviewerDashboard({ onClose }) {
 
 
 // ── Tools Menu Dropdown ───────────────────────────────────────────
-function ToolsMenu({ onMod, onForms, onBPA, onUCF, onAward, onAdmin, onCompliance, onPreSol, onReview, onRequestor, onTechEval, onBranchChief, onHQDashboard, onContractRecord, onMyAcquisitions, onClauseMatrix, onDataRights, onAttachments, onRegSearch }) {
+function ToolsMenu({ onMod, onForms, onBPA, onUCF, onAward, onAdmin, onCompliance, onPreSol, onReview, onRequestor, onTechEval, onBranchChief, onHQDashboard, onContractRecord, onMyAcquisitions, onClauseMatrix, onDataRights, onAttachments, onRegSearch, onChecklist, onOfficeReadiness }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
 
@@ -4547,6 +4650,8 @@ function ToolsMenu({ onMod, onForms, onBPA, onUCF, onAward, onAdmin, onComplianc
       { label:"Review Queue",               action: onReview },
     ],
     tools: [
+      { label:"CO Checklist",             action: onChecklist },
+      { label:"Office Readiness Console",  action: onOfficeReadiness },
       { label:"Tech Eval Helper",         action: onTechEval },
       { label:"IGCE / Market Research",   action: onPreSol },
       { label:"SF Forms",                 action: onForms },
@@ -4638,6 +4743,8 @@ function CPAS() {
     try { return JSON.parse(localStorage.getItem("cpas_pending_packages") || "[]"); } catch(e) { return []; }
   });
   const [showTechEval, setShowTechEval] = useState(false);
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [showOfficeReadiness, setShowOfficeReadiness] = useState(false);
 
   useEffect(()=>{
     // Check for ?pkg=ID deep link from CO assignment email
@@ -4953,6 +5060,8 @@ function CPAS() {
             onDataRights={()=>setShowDataRights(true)}
             onAttachments={()=>setShowAttachments(true)}
             onRegSearch={()=>setShowRegSearch(true)}
+            onChecklist={()=>setShowChecklist(true)}
+            onOfficeReadiness={()=>setShowOfficeReadiness(true)}
           />
         </div>
       </div>
@@ -5321,7 +5430,26 @@ function CPAS() {
               <div style={{fontWeight:"600",fontSize:14,color:"#1a2332"}}>My Acquisitions</div>
               <div style={{fontSize:11,color:"#6b7a99"}}>Your active acquisition workspace</div>
             </div>
-            <button onClick={()=>setShowMyAcquisitions(false)} style={{background:"none",border:"none",color:"#6b7a99",fontSize:22,cursor:"pointer"}}>×</button>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={async () => {
+                try {
+                  const res = await fetch("/.netlify/functions/export-report");
+                  if (!res.ok) throw new Error("Export failed: " + res.status);
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "CPAS_Branch_Report_" + new Date().toISOString().slice(0,10) + ".xlsx";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch(e) { alert("Export error: " + e.message); }
+              }} style={{background:"#0B3D91",color:"#fff",border:"none",borderRadius:6,
+                padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:500,
+                fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif"}}>
+                ⬇ Export Branch Report
+              </button>
+              <button onClick={()=>setShowMyAcquisitions(false)} style={{background:"none",border:"none",color:"#6b7a99",fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
           </div>
           <div style={{flex:1,overflow:"auto"}}>
             <MyAcquisitions
@@ -5593,6 +5721,12 @@ function CPAS() {
           </div>
         </div>
       </div>
+    )}
+    {showChecklist && (
+      <COChecklist intake={intake} onClose={() => setShowChecklist(false)} />
+    )}
+    {showOfficeReadiness && (
+      <OfficeReadiness onClose={() => setShowOfficeReadiness(false)} />
     )}
     <AstroAssistant context={resolveAstroContext({
       screen,

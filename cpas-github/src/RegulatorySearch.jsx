@@ -46,6 +46,32 @@ export default function RegulatorySearch({ onClose }) {
   const [lastQuery, setLastQuery] = useState("");
   const PAGE_SIZE = 10;
 
+  // Admin access state — PIN-based for demo; upgrade path: Supabase Auth with is_admin column
+  const [adminUnlocked, setAdminUnlocked] = useState(
+    () => sessionStorage.getItem("cpas_admin") === "true"
+  );
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState(false);
+  const ADMIN_PIN = "cpas2026";
+
+  function unlockAdmin() {
+    if (pinInput === ADMIN_PIN) {
+      sessionStorage.setItem("cpas_admin", "true");
+      setAdminUnlocked(true);
+      setPinError(false);
+      setPinInput("");
+    } else {
+      setPinError(true);
+      setPinInput("");
+    }
+  }
+
+  function lockAdmin() {
+    sessionStorage.removeItem("cpas_admin");
+    setAdminUnlocked(false);
+    setTab("search");
+  }
+
   // Seed state
   const [seedStatus, setSeedStatus] = useState("idle"); // idle | loading | seeding | done | error
   const [seedProgress, setSeedProgress] = useState({ done: 0, total: 0, errors: 0 });
@@ -224,10 +250,26 @@ export default function RegulatorySearch({ onClose }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+      <div style={{ display:"flex", gap:8, marginBottom:20, alignItems:"center" }}>
         {tabBtn("search", "🔍 Search")}
-        {tabBtn("seed", "⚙️ Seed / Admin")}
-        {tabBtn("upload", "📤 Upload Documents")}
+        {adminUnlocked ? (
+          <>
+            {tabBtn("seed", "⚙️ Seed / Admin")}
+            {tabBtn("upload", "📤 Upload Documents")}
+            {tabBtn("baseline", "📋 Regulatory Baseline")}
+            <button onClick={lockAdmin} title="Lock admin access" style={{
+              marginLeft:"auto", background:"none", border:"1px solid "+C.border,
+              color:C.muted, padding:"5px 10px", borderRadius:6, cursor:"pointer",
+              fontSize:11, fontFamily:FONT,
+            }}>🔒 Lock Admin</button>
+          </>
+        ) : (
+          <button onClick={() => setTab("admin_login")} style={{
+            marginLeft:"auto", background:"none", border:"1px solid "+C.border,
+            color:C.muted, padding:"5px 10px", borderRadius:6, cursor:"pointer",
+            fontSize:11, fontFamily:FONT,
+          }}>🔐 Admin</button>
+        )}
       </div>
 
       {/* SEARCH TAB */}
@@ -387,7 +429,7 @@ export default function RegulatorySearch({ onClose }) {
       )}
 
       {/* SEED TAB */}
-      {tab === "seed" && (
+      {tab === "seed" && adminUnlocked && (
         <div style={{ maxWidth:600 }}>
           <div style={{ background:"#fff8e6", border:"1px solid #f5c542", borderRadius:8,
             padding:"10px 14px", marginBottom:16, fontSize:11, color:"#7a4a00", lineHeight:1.5 }}>
@@ -498,9 +540,289 @@ GRANT USAGE, SELECT ON SEQUENCE cpas_regulatory_docs_id_seq TO anon, authenticat
           </div>
         </div>
       )}
-      {tab === "upload" && (
+      {tab === "upload" && adminUnlocked && (
         <UploadTab seedToken={SEED_TOKEN} C={C} FONT={FONT} />
       )}
+
+      {tab === "baseline" && adminUnlocked && (
+        <RegBaselineTab C={C} FONT={FONT} />
+      )}
+
+      {tab === "admin_login" && (
+        <div style={{ maxWidth:380, margin:"40px auto", textAlign:"center" }}>
+          <div style={{
+            background:"#fff", border:"1px solid "+C.border, borderRadius:12,
+            padding:"32px 28px", boxShadow:"0 4px 20px rgba(26,58,110,0.08)",
+          }}>
+            <div style={{ fontSize:28, marginBottom:12 }}>🔐</div>
+            <div style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>
+              Admin Access
+            </div>
+            <div style={{ fontSize:12, color:C.muted, marginBottom:20, lineHeight:1.5 }}>
+              Regulatory knowledge base maintenance requires admin credentials.
+              Contact your system administrator if you need access.
+            </div>
+            <input
+              type="password"
+              placeholder="Enter admin PIN"
+              value={pinInput}
+              onChange={e => { setPinInput(e.target.value); setPinError(false); }}
+              onKeyDown={e => e.key === "Enter" && unlockAdmin()}
+              style={{ ...inp, marginBottom:pinError ? 6 : 12, textAlign:"center",
+                border: pinError ? "1px solid #dc2626" : "1px solid "+C.border }}
+            />
+            {pinError && (
+              <div style={{ fontSize:11, color:"#dc2626", marginBottom:10 }}>
+                Incorrect PIN. Try again.
+              </div>
+            )}
+            <button onClick={unlockAdmin} style={{
+              width:"100%", padding:"9px", background:C.blue, color:"#fff",
+              border:"none", borderRadius:8, cursor:"pointer", fontSize:13,
+              fontWeight:500, fontFamily:FONT,
+            }}>Unlock</button>
+            <button onClick={() => setTab("search")} style={{
+              marginTop:10, width:"100%", padding:"7px", background:"none",
+              color:C.muted, border:"1px solid "+C.border, borderRadius:8,
+              cursor:"pointer", fontSize:12, fontFamily:FONT,
+            }}>Cancel</button>
+          </div>
+          <div style={{ marginTop:16, fontSize:10, color:C.muted }}>
+            Admin access is stored for this browser session only.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Regulatory Baseline Tab Component ────────────────────────────
+function RegBaselineTab({ C, FONT }) {
+  const SB_URL = "https://ylzdfcyiyznazvvbqdam.supabase.co";
+  const SB_KEY = "sb_publishable_adMOxPm4Sd5fcUXRf9qKdw_VpwR382c";
+
+  const [docs, setDocs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [filterType, setFilterType] = React.useState("");
+  const [updating, setUpdating] = React.useState(null);
+  const [msg, setMsg] = React.useState("");
+  const [lastUpdated, setLastUpdated] = React.useState(null);
+
+  const DOC_TYPES = ["RFO_FAR","NFS","NFS_CG","PCD","PIC","PN","TEMPLATE","GUIDE","FAR","FORM"];
+
+  React.useEffect(() => { loadDocs(); }, []);
+
+  async function loadDocs() {
+    setLoading(true);
+    setError("");
+    try {
+      // Get distinct sources with metadata
+      const res = await fetch(
+        `${SB_URL}/rest/v1/cpas_regulatory_docs?select=source,doc_type,status,effective_date,notes,updated_at&order=doc_type,source&limit=1000`,
+        { headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY } }
+      );
+      if (!res.ok) throw new Error("Failed to load: " + res.status);
+      const rows = await res.json();
+
+      // Deduplicate by source+doc_type, keep most recent
+      const map = new Map();
+      for (const r of rows) {
+        const key = r.doc_type + "|" + r.source;
+        if (!map.has(key) || r.updated_at > map.get(key).updated_at) {
+          map.set(key, r);
+        }
+      }
+      const deduped = [...map.values()].sort((a,b) => {
+        if (a.doc_type !== b.doc_type) return a.doc_type.localeCompare(b.doc_type);
+        return a.source.localeCompare(b.source);
+      });
+
+      setDocs(deduped);
+
+      // Find most recent upload date
+      const latest = rows.reduce((max, r) => r.updated_at > max ? r.updated_at : max, "");
+      if (latest) setLastUpdated(new Date(latest).toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" }));
+
+    } catch(e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function updateStatus(source, docType, newStatus) {
+    setUpdating(source);
+    try {
+      await fetch(`${SB_URL}/rest/v1/cpas_regulatory_docs?source=eq.${encodeURIComponent(source)}&doc_type=eq.${encodeURIComponent(docType)}`, {
+        method: "PATCH",
+        headers: {
+          "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY,
+          "Content-Type": "application/json", "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      setDocs(d => d.map(r =>
+        r.source === source && r.doc_type === docType ? { ...r, status: newStatus } : r
+      ));
+      setMsg("Status updated.");
+      setTimeout(() => setMsg(""), 2000);
+    } catch(e) {
+      setMsg("Error: " + e.message);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  async function deleteSource(source, docType) {
+    if (!window.confirm(`Delete all chunks for "${source}" (${docType})?`)) return;
+    setUpdating(source);
+    try {
+      await fetch(`${SB_URL}/rest/v1/cpas_regulatory_docs?source=eq.${encodeURIComponent(source)}&doc_type=eq.${encodeURIComponent(docType)}`, {
+        method: "DELETE",
+        headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }
+      });
+      setDocs(d => d.filter(r => !(r.source === source && r.doc_type === docType)));
+      setMsg("Deleted.");
+      setTimeout(() => setMsg(""), 2000);
+    } catch(e) {
+      setMsg("Error: " + e.message);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  const STATUS_COLORS = {
+    active:     { bg:"#dcfce7", text:"#166534", label:"Active" },
+    superseded: { bg:"#fef3c7", text:"#92400e", label:"Superseded" },
+    archived:   { bg:"#f1f5f9", text:"#64748b", label:"Archived" },
+  };
+
+  const filtered = docs.filter(d => {
+    const matchType = !filterType || d.doc_type === filterType;
+    const matchSearch = !search || d.source.toLowerCase().includes(search.toLowerCase());
+    return matchType && matchSearch;
+  });
+
+  // Group by doc_type
+  const grouped = {};
+  for (const d of filtered) {
+    if (!grouped[d.doc_type]) grouped[d.doc_type] = [];
+    grouped[d.doc_type].push(d);
+  }
+
+  const inp2 = { background:"#fff", border:"1px solid "+C.border, color:C.text,
+    padding:"7px 10px", borderRadius:6, fontSize:12, fontFamily:FONT, outline:"none" };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Regulatory Baseline</div>
+          <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>
+            {lastUpdated ? `KB last updated: ${lastUpdated}` : "Loading baseline date..."}
+            {" · "}{docs.length} sources · {
+              docs.filter(d => !d.status || d.status === "active").length
+            } active
+          </div>
+        </div>
+        <button onClick={loadDocs} style={{
+          background:"none", border:"1px solid "+C.border, color:C.muted,
+          padding:"5px 12px", borderRadius:6, cursor:"pointer", fontSize:11, fontFamily:FONT,
+        }}>↻ Refresh</button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+        <input style={{ ...inp2, flex:1, minWidth:180 }} placeholder="Search sources..."
+          value={search} onChange={e => setSearch(e.target.value)} />
+        <select style={{ ...inp2 }} value={filterType} onChange={e => setFilterType(e.target.value)}>
+          <option value="">All types</option>
+          {DOC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
+      {msg && (
+        <div style={{ fontSize:12, color:C.green, marginBottom:10, padding:"6px 10px",
+          background:"#f0fdf4", borderRadius:6, border:"1px solid #bbf7d0" }}>{msg}</div>
+      )}
+      {error && (
+        <div style={{ fontSize:12, color:"#dc2626", marginBottom:10, padding:"6px 10px",
+          background:"#fef2f2", borderRadius:6 }}>{error}</div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign:"center", padding:"40px", color:C.muted, fontSize:13 }}>
+          Loading regulatory baseline...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"40px", color:C.muted, fontSize:13 }}>
+          No documents found.
+        </div>
+      ) : (
+        Object.keys(grouped).sort().map(docType => (
+          <div key={docType} style={{ marginBottom:20 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:C.muted, letterSpacing:"0.8px",
+              textTransform:"uppercase", marginBottom:8, padding:"0 2px",
+              borderBottom:"1px solid "+C.border, paddingBottom:4 }}>
+              {docType} — {grouped[docType].length} sources
+            </div>
+            {grouped[docType].map(doc => {
+              const st = doc.status || "active";
+              const stc = STATUS_COLORS[st] || STATUS_COLORS.active;
+              const isUpdating = updating === doc.source;
+              return (
+                <div key={doc.source + doc.doc_type} style={{
+                  display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
+                  borderRadius:6, marginBottom:4, background:"#fff",
+                  border:"1px solid "+C.border, opacity: isUpdating ? 0.6 : 1,
+                }}>
+                  {/* Status badge */}
+                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10,
+                    background:stc.bg, color:stc.text, fontWeight:500, flexShrink:0 }}>
+                    {stc.label}
+                  </span>
+
+                  {/* Source name */}
+                  <div style={{ flex:1, fontSize:12, color:C.text,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {doc.source}
+                  </div>
+
+                  {/* Status controls */}
+                  <select
+                    value={st}
+                    onChange={e => updateStatus(doc.source, doc.doc_type, e.target.value)}
+                    disabled={isUpdating}
+                    style={{ ...inp2, padding:"3px 6px", fontSize:11, width:"auto" }}
+                  >
+                    <option value="active">Active</option>
+                    <option value="superseded">Superseded</option>
+                    <option value="archived">Archived</option>
+                  </select>
+
+                  {/* Delete */}
+                  <button
+                    onClick={() => deleteSource(doc.source, doc.doc_type)}
+                    disabled={isUpdating}
+                    title="Delete all chunks for this source"
+                    style={{ background:"none", border:"1px solid #fee2e2", color:"#dc2626",
+                      padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:11,
+                      fontFamily:FONT, flexShrink:0 }}
+                  >✕</button>
+                </div>
+              );
+            })}
+          </div>
+        ))
+      )}
+
+      <div style={{ marginTop:16, fontSize:10, color:C.muted, borderTop:"1px solid "+C.border, paddingTop:10 }}>
+        Status changes take effect on the next document generation. Delete removes all KB chunks for that source.
+        Upload new versions via the Upload Documents tab.
+      </div>
     </div>
   );
 }
@@ -513,6 +835,7 @@ function UploadTab({ seedToken, C, FONT }) {
   const [msg, setMsg] = React.useState("");
   const [progress, setProgress] = React.useState({ done: 0, total: 0 });
   const [clearSource, setClearSource] = React.useState(true);
+  const [fileErrors, setFileErrors] = React.useState([]);
   const inp = { background:"#fff", border:`1px solid ${C.border}`, color:C.text,
     padding:"8px 12px", borderRadius:8, fontSize:12, width:"100%",
     boxSizing:"border-box", fontFamily:FONT, outline:"none" };
@@ -534,6 +857,8 @@ function UploadTab({ seedToken, C, FONT }) {
     setMsg(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}...`);
 
     let totalChunks = 0, totalErrors = 0;
+    const errorList = [];
+    setFileErrors([]);
 
     // Process in batches of 5 to keep payload size manageable
     const BATCH = 5;
@@ -542,13 +867,12 @@ function UploadTab({ seedToken, C, FONT }) {
       setMsg(`Processing files ${i+1}–${Math.min(i+BATCH, files.length)} of ${files.length}...`);
 
       try {
-        // Read files as base64
         const fileData = await Promise.all(batch.map(f => new Promise((res, rej) => {
           const reader = new FileReader();
           reader.onload = e => res({
             name: f.name,
             mimeType: f.type,
-            data: e.target.result.split(",")[1], // base64 only
+            data: e.target.result.split(",")[1],
           });
           reader.onerror = rej;
           reader.readAsDataURL(f);
@@ -565,23 +889,28 @@ function UploadTab({ seedToken, C, FONT }) {
 
         const data = await response.json();
         if (data.error) {
-          totalErrors++;
-          console.error("Upload error:", data.error);
+          totalErrors += batch.length;
+          batch.forEach(f => errorList.push(`${f.name}: ${data.error}`));
         } else {
           totalChunks += data.chunks_inserted || 0;
           totalErrors += data.errors || 0;
+          // Capture per-file errors from function
+          if (data.error_details?.length) {
+            data.error_details.forEach(e => errorList.push(e));
+          }
         }
       } catch(e) {
         totalErrors += batch.length;
-        console.error("Batch error:", e.message);
+        batch.forEach(f => errorList.push(`${f.name}: ${e.message}`));
       }
 
       setProgress({ done: Math.min(i + BATCH, files.length), total: files.length });
+      setFileErrors([...errorList]);
     }
 
     setStatus("done");
-    setMsg(`✓ Complete — ${totalChunks.toLocaleString()} chunks indexed from ${files.length} files` +
-      (totalErrors > 0 ? ` (${totalErrors} errors)` : "."));
+    setMsg(`✓ Complete — ${totalChunks.toLocaleString()} chunks indexed from ${files.length - totalErrors} files` +
+      (totalErrors > 0 ? ` · ${totalErrors} file${totalErrors > 1 ? "s" : ""} failed` : "."));
   }
 
   const DOC_TYPES = [
@@ -681,8 +1010,19 @@ function UploadTab({ seedToken, C, FONT }) {
 
         {status === "done" && (
           <div style={{ background:"#e1f5ee", border:"1px solid #9fe1cb", borderRadius:8,
-            padding:"10px 14px", marginBottom:14, fontSize:12, color:"#0f6e56" }}>
+            padding:"10px 14px", marginBottom:fileErrors.length ? 8 : 14, fontSize:12, color:"#0f6e56" }}>
             {msg}
+          </div>
+        )}
+        {fileErrors.length > 0 && (
+          <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8,
+            padding:"10px 14px", marginBottom:14, fontSize:11, color:"#b91c1c", maxHeight:160, overflowY:"auto" }}>
+            <div style={{ fontWeight:"600", marginBottom:6 }}>Files that failed ({fileErrors.length}):</div>
+            {fileErrors.map((e, i) => (
+              <div key={i} style={{ padding:"2px 0", borderBottom: i < fileErrors.length-1 ? "1px solid #fecaca" : "none" }}>
+                {e}
+              </div>
+            ))}
           </div>
         )}
 

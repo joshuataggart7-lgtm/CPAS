@@ -961,6 +961,54 @@ export const CLAUSE_LIBRARY = [
     fillIns: [],
   },
   {
+    num: "1852.226-73",
+    title: "Major Breach of Safety or Security",
+    farRef: "NFS 1826.7001(e) / PCD 26-03A",
+    section: "H",
+    req: (p) => p.value >= 500000 ? "REQUIRED" : "OPTIONAL",
+    alternates: [
+      "Alt I — contracts with educational/nonprofit with 52.249-5 termination clause",
+      "Alt I — commercial contracts containing 52.212-4",
+    ],
+    fillIns: [],
+    note: "Required in all solicitations and contracts ≥$500K unless waived above CO level with PM and safety/security official concurrence. Authorized for commercial acquisitions per NFS 1812.205-70(L). Use Alt I for commercial contracts (with 52.212-4) or educational/nonprofit contracts (with 52.249-5). Per NFS 1826.7001(e) / PCD 26-03A.",
+  },
+  {
+    num: "1852.237-73",
+    title: "Release of Sensitive Information",
+    farRef: "NFS 1837.203-71",
+    section: "H",
+    req: (p) => p.hasSensitiveInfo ? "REQUIRED" : "CONDITIONAL",
+    fillIns: [],
+    note: "Companion to 1852.237-72. Required when contractor may release sensitive information obtained during performance. Authorized for commercial acquisitions per NFS 1812.205-70(R). Insert both 72 and 73 when contractor will access or release sensitive Government information.",
+  },
+  {
+    num: "1852.246-72",
+    title: "Material Inspection and Receiving Report",
+    farRef: "NFS 1846.670 / PCD 25-26",
+    section: "H",
+    req: (p) => {
+      // Required for contracts with separate and distinct deliverables, even if not separately priced
+      // Not required for: simplified acquisition, negotiated subsistence, scientific/technical reports
+      if (p.lane === "SIMPLIFIED" || p.lane === "MICROPURCHASE") return null;
+      if (p.isServicesContract && !p.hasDeliverables) return null;
+      return "CONDITIONAL";
+    },
+    fillIns: [
+      { id: "dd250_copies", label: "Number of DD Form 250 copies and distribution instructions", placeholder: "e.g., 2 copies — 1 to CO, 1 to COR" },
+    ],
+    note: "Required when there will be separate and distinct deliverables, even if not separately priced. Not required for simplified acquisition contracts, negotiated subsistence contracts, or contracts where the deliverable is a scientific or technical report. Authorized for commercial acquisitions per NFS 1812.205-70(S). Per NFS 1846.670.",
+  },
+  {
+    num: "1852.246-74",
+    title: "Counterfeit Electronic Part Detection and Avoidance",
+    farRef: "NFS 1846.7003",
+    section: "H",
+    req: (p) => (p.reqType === "SUPPLIES" || p.hasElectronicParts) ? "REQUIRED" : null,
+    fillIns: [],
+    note: "Required for acquisitions of electronic parts or end items containing electronic parts where quality standards are necessary. Per NFS 1846.7003. Authorized for commercial acquisitions per NFS 1812.205-70(T).",
+  },
+  {
     num: "1852.242-70",
     title: "Technical Direction",
     farRef: "NFS 1842.270",
@@ -976,6 +1024,48 @@ export const CLAUSE_LIBRARY = [
     farRef: "NFS 1842.7001",
     req: (p) => p.performsOnFederalFacility ? "REQUIRED" : null,
     fillIns: [],
+  },
+  {
+    num: "1852.233-70",
+    title: "Disputes",
+    farRef: "NFS 1833.107-70",
+    section: "H",
+    req: (p) => "REQUIRED",
+    note: "Required in ALL NASA solicitations per NFS 1833.107-70. Class deviation — inserts NASA-specific disputes language. No dollar threshold.",
+  },
+  {
+    num: "1852.234-1",
+    title: "Notice of Earned Value Management System",
+    farRef: "NFS 1834.203-70 / PCD 25-05A",
+    section: "H",
+    req: (p) => {
+      const isDevContract = (p.isCostType || p.contractType === "FPIF") && p.value >= 50000000 && p.pop >= 18 && p.hasDevelopmentWork;
+      if (isDevContract) return "REQUIRED";
+      return null;
+    },
+    note: "Required in solicitations for cost-type or FPIF contracts ≥$50M, ≥18 months POP, with development work scope. Per NFS 1834.21 / NFS 1834.203-70. Companion: include 1852.234-2 for contracts ≥$100M.",
+  },
+  {
+    num: "1852.234-2",
+    title: "Earned Value Management System",
+    farRef: "NFS 1834.203-70 / PCD 25-05A",
+    section: "H",
+    req: (p) => {
+      const isEVMRequired = (p.isCostType || p.contractType === "FPIF") && p.value >= 100000000 && p.pop >= 18 && p.hasDevelopmentWork;
+      if (isEVMRequired) return "REQUIRED";
+      const isEVMOptional = (p.isCostType || p.contractType === "FPIF") && p.value >= 50000000 && p.pop >= 18 && p.hasDevelopmentWork;
+      if (isEVMOptional) return "CONDITIONAL";
+      return null;
+    },
+    note: "REQUIRED at ≥$100M (cost/FPIF, ≥18 months POP, development work scope) — contractor EVMS must be CFA-accepted EIA-748 compliant. CONDITIONAL at $50M-$99.9M — use with Alternate I per NFS 1834.203-70. Exception: SMD Class D below $150M lifecycle cost.",
+  },
+  {
+    num: "1852.235-70",
+    title: "NASA STI Compliance and Distribution Services",
+    farRef: "NFS 1835.101-70(a)",
+    section: "H",
+    req: (p) => p.reqType === "R&D" ? "REQUIRED" : null,
+    note: "Required in all R&D contracts, interagency agreements, and cost-reimbursement supply contracts involving R&D work. Per NFS 1835.101-70(a).",
   },
   {
     num: "1852.245-70",
