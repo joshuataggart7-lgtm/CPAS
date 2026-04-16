@@ -101,7 +101,9 @@ export default function RegulatorySearch({ onClose }) {
         setHasMore(data.results.length === PAGE_SIZE);
         setPage(pageNum);
         setLastQuery(q.trim());
-        setSearchMsg(`${append ? "Showing more results" : data.count + " result" + (data.count !== 1 ? "s" : "") + " found"}`);
+        const baseMsg = append ? "Showing more results" : data.count + " result" + (data.count !== 1 ? "s" : "") + " found";
+        const expandMsg = data.expanded ? ` — expanded "${q.trim()}" to include regulatory text` : "";
+        setSearchMsg(baseMsg + expandMsg);
       } else {
         if (!append) { setResults([]); setHasMore(false); }
         setSearchMsg(append ? "No more results." : "No results found. Try different keywords or check that the knowledge base is seeded.");
