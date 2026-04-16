@@ -50,3 +50,6 @@
 
 [functions."job-status"]
   timeout = 10
+
+[functions."export-report"]
+  timeout = 60
